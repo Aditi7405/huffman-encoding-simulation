@@ -205,10 +205,13 @@ export default function HuffmanAnimation(){
             const leftName = `${step.left.char} (${step.left.freq})`;
             const rightName = `${step.right.char} (${step.right.freq})`;
 
-            const allNodes = step.forest.map(node => {
+            //const allNodes = step.forest.map(node => {
+            const allNodes = step.forest.map(node => {    
                 const nodeName =`${node.char} (${node.freq})`;
-                const isOrange = nodeName === leftName || nodeName === rightName;
-
+                const isOrange = 
+                nodeName === leftName || 
+                nodeName === rightName;
+            
             if(isOrange){
                 {/*if(currentStep <= 0){
                     return{
@@ -225,17 +228,18 @@ export default function HuffmanAnimation(){
                 };
             }
         });
+         
+        
             setTree({
                 name: "virtual_root",
                 children: allNodes
             });
-        
-          {/*  setTree(convertForestToD3(step.forest)); */}
+            setShowEdgeExplanation(false);
+          //  setTree(convertForestToD3(step.forest)); 
         }
 
         else if(step.type === "merge"){
-            setTree(
-            convertForestToD3(steps[next].forest));
+            setTree(convertForestToD3(steps[next].forest));
             setShowEdgeExplanation(true);
         }
     }
@@ -250,6 +254,55 @@ export default function HuffmanAnimation(){
         char: item.char,
         freq: item.freq
     }));                
+    
+    function handlePreviousStep(){
+        if(currentStep <= -1){
+            return;
+        }
+        if(currentStep === 0){
+            setCurrentStep(-1);
+            setTree(null);
+            setShowEdgeExplanation(false);
+            setIsComplete(false);
+            return;
+        }
+
+        const prev = currentStep - 1;
+        setCurrentStep(prev);
+        const step = steps[prev];
+        setIsComplete(false);
+
+        if (step.type === "select"){
+            const leftName = `${step.left.char} (${step.left.freq})`;
+            const rightName = `${step.right.char} (${step.right.freq})`;
+
+            const allNodes = step.forest.map(node => {
+                const nodeName = `${node.char} (${node.freq})`;
+
+                const isSelected =
+                   nodeName === leftName ||
+                   nodeName === rightName;
+
+                if(isSelected){
+                    return convertNode(node);
+                } else {
+                    return {name: nodeName, 
+                            children: []};
+                }
+            });    
+            
+            setTree({
+                name: "virtual_root",
+                children: allNodes
+            });
+            setShowEdgeExplanation(false);
+    }
+    else if(step.type === "merge"){
+        setTree(convertForestToD3(step.forest));
+
+        setShowEdgeExplanation(true);
+    }
+}
 
     function handleImage(x){
         setImage(x);
@@ -485,6 +538,28 @@ export default function HuffmanAnimation(){
              draggable={true}
              zoomable={true}
               
+            pathClassFunc={({source, target}) => {
+                const stepData = steps[currentStep];
+
+                if (!stepData) return "custom-link";
+                    
+                const leftName = `${stepData?.left?.char} (${stepData?.left?.freq})`;
+                const rightName = `${stepData?.right?.char} (${stepData?.right?.freq})`;
+                const sourceName = source.data.name;
+                const targetName = target.data.name;
+                
+                if (stepData.type === "select"){
+                    if (sourceName === "virtual_root"){
+                        const isSelected = targetName === leftName || targetName === rightName;
+                        return isSelected ? "custom-link" : "hidden-link";
+                    }
+                    if(sourceName === leftName || sourceName === rightName) {
+                        return "custom-link";
+                    }
+                    return "hidden-link";
+                }
+                return "custom-link";
+            }}
 
              renderCustomNodeElement={({nodeDatum}) => {
              if(nodeDatum.name=== "root" || nodeDatum.name === "virtual_root"){
@@ -673,6 +748,16 @@ export default function HuffmanAnimation(){
         ? 'not-allowed' : 'pointer'}}>
         Next Step
     </button>
+
+    <button className="control-btn"
+       onClick={handlePreviousStep}
+       disabled={frequencyData.length === 0 || !showInitialNodes}
+       style={{
+       opacity: frequencyData.length === 0 || !showInitialNodes ? 0.4 : 1,
+       cursor: frequencyData.length === 0 || !showInitialNodes ? 'not-allowed' : 'pointer'
+       }}>
+       Prev Step
+       </button>
 
     <button className="control-btn"
         onClick={() => {

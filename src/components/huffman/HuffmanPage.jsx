@@ -33,6 +33,9 @@ import "react-toastify/dist/ReactToastify.css";
 import HuffmanAnimation from "../HuffmanAnimation";
 
 import { OpenCvProvider } from "opencv-react";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
+import { createPortal } from "react-dom";
+import zIndex from "@mui/material/styles/zIndex";
 
 //returns a tab panel
 function TabPanel(props) {
@@ -50,7 +53,119 @@ function TabPanel(props) {
     </div>
   );
 }
+function TutorBubble({text, targetRef, visible}) {
+  const [pos, setPos] = useState({top:0,  left: 0, width: 0});
+  const [wordIndex, setWodIndex] = useState(0);
+  const words = text ? text.split(" ") : [];
 
+  useEffect(() => {
+    if(!visible || !targetRef?.current) return;
+
+    const el = targetRef.current;
+    const rect = el.getBoundingClientRect();
+    const scrollY = window.scrollY || window.pageYOffset;
+    const scrollX = window.scrollX || window.pageXOffset;
+
+    setPos({
+      top: rect.bottom + scrollY +12,
+      left: rect.left + scrollX,
+      width: Math.max(rect.width, 260),
+    });
+  }, [visible, targetRef, text]);
+
+  useEffect(() => {
+    if (!visible || !text) {
+      setWordIndex(0);
+      return;
+    }
+    setWordIndex(0);
+  }, [text, visible]);
+  useEffect(() => {
+    if (!visible) return;
+    if (wordIndex >=words.length) return;
+    const timer = setTimeout(() => {
+      setWordIndex((prev) => prev + 1);
+    }, 370);
+    return () => clearTimeout(timer);
+  }, [wordIndex, visible, words.length]);
+
+  if(!visible || !text) return null;
+
+  return (
+    <div
+    style={{
+      position: "absolute",
+      top: pos.top,
+      left: pos.left,
+      width: pos.width,
+      zIndex: 9999,
+      background: "white",
+      border: "2px solid #1d2a6d",
+      borderRadius: "14px",
+      padding: "10px 14px",
+      boxShadow: "0 6px 24px rgba(29,42,109,0.18)",
+      fontSize: "13px",
+      lineHeight: "1.8",
+      pointerEvents: "none",
+    }}>
+    <div
+        style={{
+          position: "absolute",
+          top: "-10px",
+          left: "22px",
+          width: 0,
+          height: 0,
+          borderLeft: "10px solid transparent",
+          borderRight: "10px solid transparent",
+          borderBottom: "10px solid #1d2a6d",
+        }}
+      /> 
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "6px",
+          marginBottom: "7px",
+          fontSize: "11px",
+          color: "#92400e",
+          background: "#fef3c7",
+          padding: "2px 9px",
+          borderRadius: "20px",
+        }}>
+        <span
+          style={{
+            width: "6px",
+            height: "6px",
+            borderRadius: "50%",
+            background: "#f59e0b",
+            display: "inline-block",
+            animation: "tutorBlink 1s infinite",
+          }}
+        />
+        Guided Tutor
+        </div> 
+        <div>
+          {words.map((word, i) => (
+            <span
+            key={i}
+            style={{
+              padding: "1px 3px",
+              marginRight: "3px",
+              borderRadius: "4px",
+              display: "inline-block",
+              background: i === wordIndex ? "#fff8e1" : "transparent",
+              color: i === wordIndex ? "#92400e" : "#1d2a6d",
+              fontWeight: i === wordIndex ? "600" : "400",
+              borderBottom: i === wordIndex ? "2px solid #f59e0b" :"2px solid transparent",
+              transition: "all 0.15s ease",
+            }}>
+              {word}
+            </span>
+          ))}
+        </div>
+    </div>
+  );
+}
 export default function HuffmanPage() {
   const myProcess2Button = useRef(null);
 
@@ -79,9 +194,20 @@ export default function HuffmanPage() {
   };
 
   const handlePrint = () => {
+    if (isTutorEnabled || isTutorPlaying || tutorPaused){
+      isTutorCancelledRef.current = true;
+      speechSynthesis.cancel();
+      if (stepIndexRef.current > 0) stepIndexRef.current -=1;
+      setIsTutorPlaying(false);
+      setTutorPaused(true);
+      speakText("You have clicked the Print button. The print dialog will now open.")
+    }
     window.print(); // Triggers the print dialog
   };
 
+ 
+
+  const cv = window.cv;
   const [mrl, setMrl] = useState("");
   //const [mrl,setMrl]=useState(1);
   const [qfactor, setQfactor] = useState("");
@@ -95,7 +221,19 @@ export default function HuffmanPage() {
   const [isImageProcessed, setIsImageProcessed] = useState(false);
   const [isAnimationPlaying, setIsAnimationPlaying] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
-
+  const [instructionStep, setInstructionStep] = useState(-1);
+  const [tourStep, setTourStep] = useState(-1);
+  const [tourWordIndex, setTourWordIndex] = useState(0);
+  const [tourMsgPos, setTourMsgPos] = useState({ top: 0, right: 10 });
+  const [isTourPlaying, setIsTourPlaying] = useState(false);
+  const [isTutorEnabled, setIsTutorEnabled] = useState(false);
+  const [isTutorPlaying, setIsTutorPlaying] = useState(false);
+  const [tutorPaused, setTutorPaused] = useState(false);
+  const [currentTutorStep, setCurrentTutorStep] = useState(-1);
+  const [tutorMessageStep, setTutorMessageStep] = useState(-1);
+  const [highlightTick, setHighlightTick] = useState(0);
+  const [showTutorPrompt, setShowTutorPrompt] = useState(false);
+   
   function calculateEntropyMap(srcGray) {
     const kernelSize = 9;
     const half = Math.floor(kernelSize / 2);
@@ -140,8 +278,32 @@ export default function HuffmanPage() {
   function lossyHuffmanEncode() {
     const imgElement = document.getElementById("inputImage");
 
-    if (!imgElement || isNaN(qfactor) || qfactor < 1) {
-      notifyE("Please enter the value for Quantization Factor.");
+    if(isTutorEnabled || isTutorPlaying || tutorPaused){
+      isTutorCancelledRef.current = true;
+      speechSynthesis.cancel();
+      if(stepIndexRef.current > 0) stepIndexRef.current -=1;
+      setIsTutorPlaying(false);
+      setTutorPaused(true);
+
+      if (selectedImage === null){
+        speakFeedback("Please select an image first from the available sample images or upload your owwn image.");
+        return;
+      }
+    
+      if (!qfactor || isNaN(qfactor) || qfactor < 1) {
+        speakFeedback("Please enter a valid quantization factor before clicking the process button.");
+        return;
+      }
+      speakFeedback("Great! You have selected an image and entered the quantization factor. Please watch the output for the entropy maps and compression ratio.")
+    }
+
+    if (selectedImage === null || !imgElement) {
+      notifyE("Please select an image first.");
+      return;
+    }
+
+    if(!qfactor || isNaN(qfactor) || qfactor < 1){
+      notifyE("Please enter the value for Qunatization Factor.");
       console.log("Image or qfactor problem");
       return;
     }
@@ -211,11 +373,17 @@ export default function HuffmanPage() {
   var indexTabValue = tabValue;
 
   const instr = () => {
-    setOpenInstructionsModal(true);
-  };
+    
+    isTutorCancelledRef.current = true;
+    speechSynthesis.cancel();
+    if (stepIndexRef.current > 0) stepIndexRef.current -= 1;
+    wasTutorActiveRef.current = isTutorEnabled || isTutorPlaying || tutorPaused;
 
-  const exp = () => {
-    setOpenRunLengthModal(true);
+    setIsTutorPlaying(false);
+    setTutorPaused(true);
+    setCurrentTutorStep(-1);
+    setInstructionStep(0);
+    setOpenInstructionsModal(true);
   };
 
   const exp2 = () => {
@@ -229,6 +397,8 @@ export default function HuffmanPage() {
 
   const [selectedImage, setSelectedImage] = useState(0);
   const [imageName, setImageName] = useState("");
+
+  
 
   const handleImageChange = (event) => {
     const file = event.target.files?.[0];
@@ -274,7 +444,19 @@ export default function HuffmanPage() {
   };
 
   const handleCloseModal = () => {
+    speechSynthesis.cancel();
     setOpenInstructionsModal(false); // Close the modal
+    setInstructionStep(-1);
+
+    if (wasTutorActiveRef.current) {
+      setTimeout(() => {
+        isTutorCancelledRef.current=false;
+        setIsTutorEnabled(true);
+        setTutorPaused(false);
+        setIsTutorPlaying(true);
+        speakStep();
+      }, 200);
+    }
   };
 
   const handleClose3Modal = () => {
@@ -289,6 +471,211 @@ export default function HuffmanPage() {
   useEffect(() => {
     speechSynthesis.cancel(); // Cancel any speech on reload
   }, []);
+
+  useEffect(() => {
+    setShowTutorPrompt(true);
+  }, []);
+  
+  useEffect(() => {
+    if (tourStep === -1) {
+      setTourWordIndex(0);
+      return;
+    }
+    const text = tourSteps[tourStep]?.text || "";
+    const word = text.split(" ");
+    if(tourWordIndex >= word.length) return;
+    const timer = setTimeout(() => {
+      setTourWordIndex(prev => prev + 1);
+    }, 550);
+    return () => clearTimeout(timer);
+  }, [tourWordIndex, tourStep]);
+
+  useEffect (() => {
+    setTourWordIndex(0);
+  }, [tourStep]);
+
+  useEffect(() => {
+    if (!openInstructionsModal) return;
+    if (instructionStep === -1) return;
+
+    const steps = instructionsList[indexTabValue] || [];
+    const normalSteps = steps.filter(s => !s.trim().startsWith("Note:"));
+
+    if(instructionStep >= normalSteps.length) {
+      speechSynthesis.cancel();
+      setInstructionStep(-1);
+      return;
+    }
+
+    const speakText= 
+      `${instructionStep === 0
+      ? "Instruction for Lossy Huffman Encoding." 
+      : ""
+    } Step ${instructionStep + 1}. ${
+     normalSteps[instructionStep]
+    }`;
+
+    const utterance = new SpeechSynthesisUtterance(speakText);
+   
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    utterance.onend = () => {
+      setInstructionStep(prev => {
+        if (prev + 1 >= normalSteps.length) return -1;
+        return prev + 1;
+      });
+    };
+
+    utterance.onerror = () => {
+      setInstructionStep(-1);
+    };
+
+    speechSynthesis.speak(utterance);
+    return () => {
+      speechSynthesis.cancel();
+    };
+  }, [instructionStep, openInstructionsModal]);
+
+  const speakFeedback = (text) => {
+    console.log("speakFeedback called with:", text);
+    console.log("speechSynthesis available:", !!window.speechSynthesis);
+
+    window.speechSynthesis.cancel();
+    setTimeout(() => {
+      console.log("inside setTimeout, about to speak");
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.onStart = () => console.log("SPEECH STARTED");
+      utterance.onend = () => console.log("SPEECH ENDED");
+      utterance.onerror = () => console.log("SPEECH ERROR:", e.error);
+      window.speechSynthesis.speak(utterance);
+      console.log("speak() called, speaking:", window.speechSynthesis.speaking);
+    }, 300);
+  };
+
+  const stepIndexRef = useRef(0);
+  const isTourCancelledRef = useRef(false);
+  const isTutorCancelledRef = useRef(false);
+  const wasTutorActiveRef = useRef(false);
+  const guidedTutorBtnRef = useRef(null);
+  const instructionButtonRef = useRef(null);
+  const currentTutorStepRef = useRef(-1);
+  const toolboxRef = useRef(null);
+  const chooseImageRef = useRef(null);
+  const uploadButtonRef = useRef(null);
+  const quantizationRef = useRef(null);
+  const inputImageRef = useRef(null);
+  const processButtonRef = useRef(null);
+  const outputSectionRef = useRef(null);
+  const printButtonRef = useRef(null);
+  const conceptButtonRef = useRef(null);
+
+
+const tutorSteps = [
+  { text: "Welcome! Let me guide you through this experiment.", ref: guidedTutorBtnRef },
+  { text: "Click Instructions to see the procedure.", ref: instructionButtonRef },
+  { text: "This is the Lossy Huffman Tools panel.", ref: toolboxRef },
+  { text: "Select an image from the available options.", ref: chooseImageRef },
+  { text: "You can also upload your own image.", ref: uploadButtonRef },
+  { text: "Enter a quantization factor here.", ref: quantizationRef },
+  { text: "This is the Input Image section.", ref: inputImageRef },
+  { text: "Click Process to generate output.", ref: processButtonRef },
+  { text: "The output and compression ratio appear here.", ref: outputSectionRef },
+  { text: "Click Print to save or print your result.", ref: printButtonRef },
+  { text: "Click Concept to see how Huffman Encoding works.", ref: conceptButtonRef },
+];
+
+const getHightlightStyle = (ref) => {
+  if(!isTutorPlaying && !tutorPaused) return {};
+
+  const activeStep = currentTutorStepRef.current;
+  if (activeStep < 0 || activeStep >= tutorSteps.length) return {};
+  const activeRef = tutorSteps[activeStep]?.ref;
+  if (!activeRef || activeRef !== ref) return {};
+
+  return {
+    boxShadow: "0 0 0 4px rgba(245, 158, 11, 0.9)",
+    borderRadius: "12px",
+    transition: "all 0.3s ease",
+    animation: "pulseHighlight 1.2s infinite",
+    position: "relative",
+    zIndex: 5,
+  };
+};
+
+const startGuidedTutor = () => {
+  setShowTutorPrompt(false);
+  isTutorCancelledRef.current = false;
+  setIsTutorEnabled(true);
+  setTutorPaused(false);
+  stepIndexRef.current = 0;
+  currentTutorStepRef.current = 0;
+  speakStep();
+};
+
+const handleTutorToggle = () => {
+  if (isTutorPlaying) {
+    isTutorCancelledRef.current = true;
+    speechSynthesis.cancel();
+    setIsTutorPlaying(false);
+    setTutorPaused(true);
+  } else {
+    isTutorCancelledRef.current = false;
+    setIsTutorEnabled(true);
+    setIsTutorPlaying(true);
+    setTutorPaused(false);
+    speakStep();
+  }
+};
+
+const speakStep = () => {
+  if (isTutorCancelledRef.current) return;
+
+  const step = tutorSteps[stepIndexRef.current];
+
+  if (!step) {
+    setIsTutorPlaying(false);
+    setCurrentTutorStep(-1);
+    currentTutorStepRef.current = -1;
+    return;
+  }
+
+  // PEHLE highlight update karo
+  currentTutorStepRef.current = stepIndexRef.current;
+  setCurrentTutorStep(stepIndexRef.current);
+  setHighlightTick(prev => prev + 1);
+
+  if (step.ref?.current) {
+    step.ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  // 100ms baad speech shuru karo
+  setTimeout(() => {
+    if (isTutorCancelledRef.current) return;
+
+    const utterance = new SpeechSynthesisUtterance(step.text);
+    const voices = speechSynthesis.getVoices();
+    if (voices.length) utterance.voice = voices[0];
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    utterance.onend = () => {
+      if (isTutorCancelledRef.current) return;
+      stepIndexRef.current += 1;
+      speakStep();
+    };
+
+    utterance.onerror = () => {
+      setIsTutorPlaying(false);
+      setCurrentTutorStep(-1);
+      currentTutorStepRef.current = -1;
+    };
+
+    speechSynthesis.speak(utterance);
+  }, 100);
+};
 
   const instructionsList = {
     0: [
@@ -319,6 +706,130 @@ export default function HuffmanPage() {
       "Click the Print button to print the result.",
     ],
   };
+
+  const tourSteps = [
+  {
+    text: "Welcome to the Lossy Huffman Encoding experiment! I will guide you through the experiment interface and workflow.",
+    refKey: "guidedTutor",
+  },
+  {
+    text: "This is the Instructions button. Click here at any time to view the detailed procedure for performing experiment.",
+    refKey: "instruction",
+  },
+  {
+    text: "This is the Lossy Huffman Tools panel. It contains all the utilities you need to perform the experiment.",
+    refKey: "toolbox",
+  },
+  {
+    text: "In this section, you can select a sample image for processing. Click on any image to choose it as the input.",
+    refKey: "chooseImage",
+  },
+  {
+    text: "You can also upload your own image by clicking the Upload File button.",
+    refKey: "upload",
+  },
+  {
+    text: "Enter a valid Quantization Factor value here. It controls the level of compression.",
+    refKey: "quantization",
+  },
+  {
+    text: "This is the Input Image section, where the selected or uploaded image will be displayed before processing.",
+    refKey: "inputImage",
+  },
+  {
+    text: "Once you have selected an image and entered the quantization factor, click the Process button to generate the output.",
+    refKey: "process",
+  },
+  {
+    text: "The processed output image, entropy maps and compression ratio will appear in this section.",
+    refKey: "output",
+  },
+  {
+    text: "Click the Print button to print or save the generated result.",
+    refKey: "print",
+  },
+  {
+    text: "Click the Concept button to understand how Huffman Encoding works through a step by step animation.",
+    refKey: "concept",
+  },
+  {
+    text: "This completes the guided walkthrough. You are all set to start the experiment. Good luck!",
+    refKey: "concept",
+  },
+];
+
+const getRefByKey = (key) => {
+  const map = {
+    guidedTutor: guidedTutorBtnRef,
+    instruction: instructionButtonRef,
+    toolbox: toolboxRef,
+    chooseImage: chooseImageRef,
+    upload: uploadButtonRef,
+    quantization: quantizationRef,
+    inputImage: inputImageRef,
+    process: processButtonRef,
+    output: outputSectionRef,
+    print: printButtonRef,
+    concept: conceptButtonRef,
+  };
+  return map[key];
+};
+
+const updateTourPos = (refKey) => {
+  const ref = getRefByKey(refKey);
+  if (ref?.current) {
+    const rect = ref.current.getBoundingClientRect();
+    setTourMsgPos({
+      top: rect.bottom + 12,
+      right: window.innerWidth - rect.right,
+    });
+    ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+};
+
+const speakTourText = (text, onDone) => {
+  window.speechSynthesis.cancel();
+  setTimeout(() => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) utterance.voice = voices[0];
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    utterance.onend = () => { if (onDone) onDone(); };
+    utterance.onerror = () => { if (onDone) onDone(); };
+    window.speechSynthesis.speak(utterance);
+  }, 300);
+};
+
+const goToStep = (index) => {
+  if (index >= tourSteps.length) {
+    setTourStep(-1);
+    setIsTourPlaying(false);
+    setTourWordIndex(0);
+    return;
+  }
+  const step = tourSteps[index];
+  setTourStep(index);
+  setTourWordIndex(0);
+  updateTourPos(step.refKey);
+  speakTourText(step.text);
+};
+
+const startTour = () => {
+  isTourCancelledRef.current = false;
+  setIsTourPlaying(true);
+  goToStep(0);
+};
+
+const stopTour = () => {
+  isTourCancelledRef.current = true;
+  window.speechSynthesis.cancel();
+  setTourStep(-1);
+  setIsTourPlaying(false);
+  setTourWordIndex(0);
+};
+
 
   const getInstructions = () => {
     const steps = instructionsList[indexTabValue];
@@ -355,6 +866,36 @@ export default function HuffmanPage() {
       </div>
     );
   };
+  
+const handleConceptClick = () => {
+  if (isTutorEnabled || isTutorPlaying || tutorPaused) {
+    isTutorCancelledRef.current = true;
+    speechSynthesis.cancel();
+    if (stepIndexRef.current > 0) stepIndexRef.current -= 1;
+    setIsTutorPlaying(false);
+    setTutorPaused(true);
+    speakFeedback("You clicked the Concept button. This will show you a step by step animation explaining how Huffman Encoding works.");
+    return;
+  }
+  exp2();
+};
+
+const handleProcessClick = () => {
+  console.log("handleProcessClick called");
+  console.log("isTutorEnabled:", isTutorEnabled);
+  console.log("isTutorPlaying:", isTutorPlaying);
+  console.log("tutorPaused:", tutorPaused);
+  if (isTutorEnabled || isTutorPlaying || tutorPaused) {
+    isTutorCancelledRef.current = true;
+    speechSynthesis.cancel();
+    if(stepIndexRef.current > 0) stepIndexRef.current -= 1;
+    setIsTutorPlaying(false);
+    setTutorPaused(true);
+    speakFeedback("You clicked the Process button. Make sure you have selected an image and enetred a valid quantization factor, the click Process to generate the output.");
+    return;
+  }
+  lossyHuffmanEncode();
+}
 
   return (
     <OpenCvProvider>
@@ -369,8 +910,13 @@ export default function HuffmanPage() {
           {/* Tabs for Desktop */}
 
           <h2 className="header-heading">Huffman Encoding</h2>
-          <div id="header_button">
-            <Button title="Play" ref={voicePlay}>
+          <div id="header_button" style={{display: "flex", 
+              alignItems:"center",
+              gap: "12px",
+              marginLeft:"auto", 
+              position:"relative"}}>
+            <Button title="Play" ref={voicePlay} onClick={handleTutorToggle}
+            style={{ display: isTutorPlaying? "none" : "inline-flex"}}>
               <img
                 src={voice}
                 alt="voice"
@@ -378,34 +924,254 @@ export default function HuffmanPage() {
               />
             </Button>
 
-            <Button ref={voicePause} title="Pause" style={{ display: "none" }}>
+            <Button ref={voicePause} title="Pause" onClick={handleTutorToggle}
+            style={{ display: isTutorPlaying ? "inline-flex" : "none"}}>
               <img
                 src={voice_pause}
                 alt="voice"
                 style={{ width: "40px", height: "auto" }}
               />
             </Button>
-
-            <Button style={{ color: "#D1D3D8" }} onClick={instr}>
-              Instructions
+       
+            <Button 
+            ref={instructionButtonRef}
+            style={{ color: "#D1D3D8",
+            ...(tutorMessageStep === 1 ? {
+              boxShadow: "0 0 15px rgba(255, 165, 0, 0.6)",
+            } : {}) 
+            }} onClick={instr}>
+              <strong>instructions</strong>
             </Button>
-          </div>
+
+            <button 
+            ref={guidedTutorBtnRef}
+            onClick={() => { 
+              if (tourStep >= 0) {
+                stopTour();
+              } else {
+                setShowTutorPrompt(true);
+              }
+            }}
+               style={{
+                background: tourStep >=0 ?"#ff4444" : "yellow",
+                color: "#1d2a6d",
+                fontWeight: 600,
+                padding: "8px 18px",
+                borderRadius: "10px",
+                textTransform: "none",
+                cursor: "pointer",
+                boxShadow: "0 6px 15px rgba(29, 42, 109, 0.3)",
+                transition: "0.3s ease",
+                whiteSpace: "nowrap",
+               }}>
+              {tourStep >= 0 ? "Stop Tour" : "Guided Tutor"}
+            </button>
+           </div>
+
+           {showTutorPrompt && (
+            <div 
+            style={{
+              position: "absolute",
+              top: "calc(100% + 12px)",
+              right: "0",
+              width: "350px",
+              background: "#fff",
+              borderRadius: "12px",
+              padding: "12px",
+              boxShadow: "0 8px 20px rgba(0,0,0,0.15)",
+              zIndex: 9999,
+            }}>
+            <div style={{
+              position: "absolute",
+              top: "-10px",
+              right: "24px",
+              width: 0,
+              height: 0,
+              borderLeft: "10px solid ",
+              borderRight: "10px solid ",
+              borderBottom: "10px solid white",
+            }}/>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              marginBottom: "12px"
+            }}>
+            <div 
+            style={{
+              width: "50px",
+              height: "50px",
+              borderRadius: "50%",
+              background: "#1D2A6D",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              color: "white",
+              fontSize: "22px",
+              fontWeight: "bold",
+            }}>
+            <SmartToyIcon style={{fontSize: "28px", color: "white"}}/>
+            </div>
+            <div>
+            <h3 style={{ margin: 0, color: "#1d2a6d" ,marginBottom: "10px", fontSize: "14px", fontWeight: "700"}}>
+            Guided Tutor is here to help!
+            </h3>
+            <p style={{
+              fontSize: "14px",
+              color: "#444",
+              marginBottom: "18px",
+              lineHeight: "1.5",
+            }}>
+              Welcome, Do you want Guided Tutor will give you proper guide how to run the simulaton?
+            </p>
+            <div
+              style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: "10px",
+            }}>
+
+            <button onClick={() => {
+              setIsTutorEnabled(false);
+              setShowTutorPrompt(false);
+              
+            }}
+            style={{
+            background: "#f3f4f6",
+            color: "#1d2a6d",
+            border: "1px solid #1d2a6d",
+            padding: "8px 20px",
+            borderRadius: "8px",
+            cursor: "pointer",
+            fontWeight: "600",
+            fontSize: "14px",
+            }}>
+              No, Thanks
+            </button>
+
+            <button onClick={() => {
+              setIsTutorEnabled(true);
+              setShowTutorPrompt(false);
+              
+
+              startTour();
+              
+            }}
+            style={{
+                    background: "#1d2a6d",
+                    color: "white",
+                    border: "none",
+                    padding: "8px 20px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontWeight: "600",
+                    fontSize: "14px",
+                  }}>
+                    Yes, Please
+                  </button>
+            </div>
+            </div>
+            </div>
+            </div>
+           )}
+
+          {tourStep >= 0 && createPortal(
+            <div style={{
+              position: "fixed",
+              top: `${tourMsgPos.top}px`,
+              right: `${tourMsgPos.right}px`,
+              width: "300px",
+              background: "linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))",
+              borderRadius: "18px",
+              padding: "16px",
+              boxShadow: "0 8px 25px rgba(0,0,0,0.15)",
+              zIndex: 9999,
+            }}>
+            <div style={{
+              position: "absolute",
+              top: "-10px",
+              right: "20px",
+              width: 0,
+              height: 0,
+              borderLeft: "10px solid transparent",
+              borderRight: "10px solid transparent",
+              borderBottom: "10px solid #bfdbfe",
+            }}/>
+            <div style={{
+              fonstSize: "14px",
+              color: "#333",
+              lineHeight: "1.6",
+              fontWeight: "500",
+              marginBottom: "18px",
+            }}>
+            {tourSteps[tourStep]?.text.split(" ").map((word, i) => (
+              <span key={i} style={{
+                padding: "1px 3px",
+                marginRight: "3px",
+                borderRadius: "4px",
+                display: "inline-block",
+                background: i === tourWordIndex ? "#fff8e1" : "transparent",
+                color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
+                fontWeight: i === tourWordIndex ? "600" : "400",
+                borderBottom: i === tourWordIndex ? "2px  solid #f59e0b" : "2px solid transparent",
+                transition: "all 0.15s ease",
+              }}>
+                {word}
+              </span>
+            ))}
+            </div>
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}>
+            <button onClick={stopTour}
+            style={{
+              background: "transparent",
+              border: "1px solid #1d2a6d",
+              borderRadius: "10px",
+              padding: "8px 18px",
+              color: "#64748b",
+              fontWeight: "600",
+              cursor: "pointer",
+              fontSize: "14px",
+            }}>
+              Close
+            </button>
+            <button onClick={() => goToStep(tourStep + 1)}
+            style={{
+              background: "#1d2a6d",
+              color: "white",
+              border: "none",
+              padding: "8px 18px",
+              borderRadius: "10px",
+              cursor: "pointer",
+              fontWeight: "600",
+            }}>
+              {tourStep === tourSteps.length -1 ? "Finish" : "Next"}
+            </button>
+            </div>
+            </div>,
+            document.body
+          )}
           <Dialog
-  open={openInstructionsModal}
-  onClose={handleCloseModal}
-  maxWidth="sm"
-  fullWidth
-  PaperProps={{
-    sx: { borderRadius: '8px', overflow: 'hidden', m: 2 }
-  }}
->
+           open={openInstructionsModal}
+           onClose={handleCloseModal}
+           maxWidth="sm"
+           fullWidth
+           PaperProps={{
+           sx: { borderRadius: '8px', overflow: 'hidden', m: 2 }
+          }}>
   {/* ── Navy Header ── */}
-  <Box sx={{
+  <Box 
+  style={getHightlightStyle(instructionButtonRef)}
+   sx={{
     background: '#1d2a6d',
     padding: '12px 20px'
   }}>
     <span style={{ color: 'white', fontSize: '17px', fontWeight: 600 }}>
-      Instructions
+      Instructions for Lossy Huffman Encoding
     </span>
   </Box>
 
@@ -413,7 +1179,7 @@ export default function HuffmanPage() {
   <DialogContent sx={{ padding: '20px 24px 8px' }}>
 
     {/* Blue bold title - tab ke hisaab se */}
-    <p style={{ fontWeight: 700, fontSize: '15px', color: '#1D2A6D', margin: '0 0 14px' }}>
+    {/*<p style={{ fontWeight: 700, fontSize: '15px', color: '#1D2A6D', margin: '0 0 14px' }}>
       {tabValue === 0 ? 'Run Length Encoding'
         : tabValue === 1 ? 'Lossy Huffman'
         : tabValue === 2 ? 'Sine and Cosine'
@@ -430,18 +1196,62 @@ export default function HuffmanPage() {
         <>
           <ol style={{
             margin: '0 0 12px',
-            paddingLeft: '22px',
-            fontSize: '14px',
-            lineHeight: '1.9',
-            color: '#333'
+            //paddingLeft: '22px',
+            //fontSize: '14px',
+            //lineHeight: '1.9',
+            //color: '#333'
           }}>
-            {normalSteps.map((step, idx) => {
+            {/*{normalSteps.map((step, idx) => {
               const html = step.replace(
                 /(Upload File|Process|Print|Analyze Frequency|Generate|Next Step|Reset)/g,
                 '<strong>$1</strong>'
               );
               return (
                 <li key={idx} dangerouslySetInnerHTML={{ __html: html }} />
+              );
+            })}*/}
+
+            {normalSteps.map((step, idx) => {
+              const html = step.replace(
+                /(Upload File|Process|Print|Analyze Frequency|Generate|Next Step|Reset)/g,
+                '<strong>$1</strong>'
+              );
+              return (
+                <div key={idx}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                  marginBottom: '8px',
+                  backgroundColor: instructionStep === idx ? '#fff8e1' : 'transparent',
+                  borderLeft: instructionStep === idx ? '3px solid #1d2a6d' : '3px solid transparent',
+                  paddingLeft: '8px',
+                  borderRadius: '4px',
+                  transition: 'all 0.4s ease',
+                  fontWeight: instructionStep ===idx ? '600' : '400',
+                  color: instructionStep === idx ? '#1d2a6d' : '#333',
+                  }}>
+
+                  <span style={{
+                    minWidth: '54px',
+                    fontWeight: '700',
+                    fontSize: '13px',
+                    color: instructionStep === idx ? '#1d2a6d' : '#1d2a6d',
+                    paddingTop: '2px',
+                    flexShrink: 0, 
+                  }}>
+                    Step {idx + 1}
+                  </span>
+
+                  <span 
+                  dangerouslySetInnerHTML={{ __html: html}}
+                  style={{
+                    fontSize: '14px',
+                    lineHeight: '1.9',
+                    fontWeight: instructionStep === idx ? '600' : '400',
+                    color: instructionStep === idx ? '#1d2a6d' : '#333',
+                  }}/>
+                  </div>
               );
             })}
           </ol>
@@ -526,7 +1336,9 @@ export default function HuffmanPage() {
             <div class="flex-container">
               <div class="flex-item-left">
                 <div id="left_bar">
-                  <Box
+                  <Box 
+                    ref={toolboxRef}
+                    style={getHightlightStyle(toolboxRef)}
                     sx={{
                       width: "100%",
                       height: "85%",
@@ -537,21 +1349,18 @@ export default function HuffmanPage() {
                       borderRadius: 2,
                       backgroundColor: "#ffffffff",
                       boxShadow: `
-    0 4px 8px rgba(0,0,0,0.15),
-    0 8px 16px rgba(0,0,0,0.10),
-    0 16px 24px rgba(0,0,0,0.05)
-  `,
+                          0 4px 8px rgba(0,0,0,0.15),
+                          0 8px 16px rgba(0,0,0,0.10),
+                          0 16px 24px rgba(0,0,0,0.05)`,
+
                       transition: "all 0.3s ease-in-out",
                       "&:hover": {
                         transform: "translateY(-4px)",
-                        boxShadow: `
-      0 6px 12px rgba(0,0,0,0.2),
-      0 12px 24px rgba(0,0,0,0.15),
-      0 20px 40px rgba(0,0,0,0.1)
-    `,
+                        boxShadow: `0 6px 12px rgba(0,0,0,0.2),
+                                    0 12px 24px rgba(0,0,0,0.15),
+                                    0 20px 40px rgba(0,0,0,0.1) `,
                       },
-                    }}
-                  >
+                     }} >
                     <Box
                       sx={{
                         p: 0,
@@ -587,7 +1396,9 @@ export default function HuffmanPage() {
                         },
                       }}
                     >
-                      <div class="contentog">
+                      <div  ref={chooseImageRef}
+                      class="contentog"             
+                      style={getHightlightStyle(chooseImageRef)}>
                         <h4
                           style={{
                             margin: "5px 0px",
@@ -670,8 +1481,12 @@ export default function HuffmanPage() {
                           </div>
                         </div>
 
-                        <div style={{ marginTop: "15px", textAlign: "center" }}>
-                          <label htmlFor="file-upload" className="upload-btn">
+                        <div 
+                        style={{ marginTop: "15px",
+                         textAlign: "center",}}>
+                          <label htmlFor="file-upload" className="upload-btn"
+                          ref={uploadButtonRef}
+                          style={getHightlightStyle(uploadButtonRef)}>
                             <svg
                               className="upload-icon"
                               viewBox="0 0 24 24"
@@ -709,7 +1524,7 @@ export default function HuffmanPage() {
                         >
                           Quantization Factor:
                         </h4>
-                        <input
+                        <input ref={quantizationRef}
                           className="derivative-btn"
                           type="text"
                           value={qfactor}
@@ -722,6 +1537,7 @@ export default function HuffmanPage() {
                             padding: "5px",
                             border: "1px solid #1D2A6D",
                             borderRadius: "10px",
+                            ...getHightlightStyle(quantizationRef)
                           }}
                         />
                       </div>
@@ -740,7 +1556,8 @@ export default function HuffmanPage() {
                 </div>
                 <div class="input_output" style={{ height: "70%" }}>
                   <div id="sampling_area">
-                    <Box
+                    <Box ref={inputImageRef}
+                    style={getHightlightStyle(inputImageRef)}
                       sx={{
                         width: "50%",
                         height: "100%",
@@ -773,7 +1590,7 @@ export default function HuffmanPage() {
                         },
                       }}
                     >
-                      <Box
+                      <Box 
                         sx={{
                           p: 2,
                           borderBottom: 1,
@@ -806,7 +1623,8 @@ export default function HuffmanPage() {
                         />
                       </Box>
                     </Box>
-                    <Box
+                    <Box ref={outputSectionRef}
+                    style={getHightlightStyle(outputSectionRef)}
                       sx={{
                         width: "auto",
                         height: "100%",
@@ -839,7 +1657,7 @@ export default function HuffmanPage() {
                         },
                       }}
                     >
-                      <Box
+                      <Box 
                         sx={{
                           p: 2,
                           borderBottom: 1,
@@ -879,7 +1697,7 @@ export default function HuffmanPage() {
                             </h3>
                           </>
                         )}
-                                                {/* <p>Output Image</p>  */}
+                {/* <p>Output Image</p>  */}
                         {isImageProcessed === false && (
                           <div className="process-message-container">
                             <div className="placeholder-content">
@@ -922,9 +1740,11 @@ export default function HuffmanPage() {
                   }}
                 >
                   <Button
-                    ref={myProcess2Button}
+                    ref={processButtonRef}
+                    // ref={myProcess2Button}
                     class="tool_btn"
-                    onClick={lossyHuffmanEncode}
+                    style={getHightlightStyle(processButtonRef)}
+                    onClick={handleProcessClick}
                     variant="outlined"
                     sx={{ borderColor: "#1D2A6D", color: "#1D2A6D" }}
                   >
@@ -936,7 +1756,9 @@ export default function HuffmanPage() {
 
 
                   <Button
+                    ref={printButtonRef}
                     class="tool_btn print_btn"
+                    style={getHightlightStyle(printButtonRef)}
                     onClick={handlePrint}
                     variant="outlined"
                     sx={{ borderColor: "#1D2A6D", color: "#1D2A6D" }}
@@ -947,7 +1769,9 @@ export default function HuffmanPage() {
                     </svg>
                   </Button>
                    <Button
+                    ref={conceptButtonRef}
                     class="tool_btn"
+                    style={getHightlightStyle(conceptButtonRef)}
                     onClick={exp2}
                     variant="outlined"
                     sx={{ borderColor: "#1D2A6D", color: "#1D2A6D" }}

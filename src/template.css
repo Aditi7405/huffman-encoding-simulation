@@ -464,8 +464,21 @@ html, body{
 .custom-link {
     stroke: #94a3b8;
     stroke-width: 2px;
+    fill: none;
 }
 
+.hidden-link {
+    display: none  !important;
+}
+
+.selected-link{
+    stroke: #94a3b8;
+    stroke-width: 2;
+}
+
+@keyfranes tutorBlink {
+    0%, 100% { opacity: 1; }
+}
 /* TREE */
 #binary_tree{
     border: 1px solid black;
