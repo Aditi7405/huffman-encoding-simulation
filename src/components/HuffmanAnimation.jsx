@@ -11,7 +11,11 @@ import HuffmanTree from './hufftree';
 import HuffmanTreeViewer from './htimage';
 import Box from '@mui/material/Box';
 
-export default function HuffmanAnimation(){
+export default function HuffmanAnimation({
+    symbolTextToggleRef, analyzeFreqRef, generateBtnRef, 
+  nextStepBtnRef, prevStepBtnRef, resetBtnRef, treeVisualizationRef,
+  onSymbolSelected, onAnalyzeDone,
+}) {
     const [image,setImage]=useState(0);
     const [original,setOriginal]=useState(null);
     const [tdata,setTdata]=useState('');
@@ -27,6 +31,7 @@ export default function HuffmanAnimation(){
     const [treeReady,setTreeReady] = useState(false);
     const [isComplete, setIsComplete] = useState(false);
     const [showEdgeExplanation, setShowEdgeExplanation] = useState(false);
+    const [inputMode, setInputMode] = useState('symbol');
 
     function convertNode(node) {
         if (!node) return null;
@@ -105,16 +110,27 @@ export default function HuffmanAnimation(){
         }
         return animationsteps;
     }    
+
     function handleAnalyze(){
     let freqMap = {};
-    for (let char of tdata) {
-        if (char !== " ") {
-            freqMap[char] = (freqMap[char] || 0) + 1;
+
+    if(inputMode === 'symbol' && original){
+        for (let row of original) {
+            for (let cell of row) {
+                const key = cell === 1 ? "1" : "0";
+                freqMap[key] = (freqMap[key] || 0) + 1;
+            }
         }
-    }   
+    } else {
+        for (let char of tdata) {
+            if (char !== " ") {
+                freqMap[char] = (freqMap[char] || 0) + 1;
+            }
+        }
+        if (onAnalyzeDone) onAnalyzeDone();
+    }
 
-    const result = Object.entries(freqMap).map(([char, freq]) => ({char,freq,}));
-
+    const result = Object.entries(freqMap).map(([char, freq]) => ({char, freq}));
     setFrequencyData(result);
 
     const generatedSteps = generateHuffmanSteps(result);
@@ -212,14 +228,7 @@ export default function HuffmanAnimation(){
                 nodeName === leftName || 
                 nodeName === rightName;
             
-            if(isOrange){
-                {/*if(currentStep <= 0){
-                    return{
-                        name: nodeName,
-                        children: []
-                    };
-                }*/}
-                       
+            if(isOrange){       
                 return convertNode(node);
             } else {
                 return {
@@ -227,8 +236,7 @@ export default function HuffmanAnimation(){
                    children: []
                 };
             }
-        });
-         
+        }); 
         
             setTree({
                 name: "virtual_root",
@@ -296,15 +304,14 @@ export default function HuffmanAnimation(){
                 children: allNodes
             });
             setShowEdgeExplanation(false);
-    }
-    else if(step.type === "merge"){
-        setTree(convertForestToD3(step.forest));
+            }
+            else if(step.type === "merge"){
+            setTree(convertForestToD3(step.forest));
+            setShowEdgeExplanation(true);
+            }
+            }
 
-        setShowEdgeExplanation(true);
-    }
-}
-
-    function handleImage(x){
+        function handleImage(x){
         setImage(x);
         const signs = [
             [
@@ -353,20 +360,9 @@ export default function HuffmanAnimation(){
                 freqMap[key] = (freqMap[key] || 0) + 1;
             }
         }
-
-    const result = Object.entries(freqMap).map(([char, freq]) => ({ char, freq }));
-    
-    setFrequencyData(result);
-    
-    const generatedSteps = generateHuffmanSteps(result);
-    setSteps(generatedSteps);
-    
-    // Reset tree state for fresh start
-    setCurrentStep(-1);
-    setTree(null);
-    setShowInitialNodes(false);
-
-    }
+        if (onSymbolSelected) {
+            onSymbolSelected(x);}
+        }
     
     return(
         <OpenCvProvider>
@@ -377,87 +373,116 @@ export default function HuffmanAnimation(){
     {/* LEFT SIDE */}
     <div className="left-side">
 
-        <div id="Choose_box_comp">
+    <div 
+    ref={symbolTextToggleRef}
+    style={{
+    display: 'flex',
+    border: '2px solid #1d2a6d',
+    borderRadius: '10px',
+    overflow: 'hidden',
+    marginBottom: '12px',
+    width: '100%'
+    }}>
+    <button
+    onClick={() => { setInputMode('symbol'); setTdata(''); }}
+    style={{
+      flex: 1,
+      padding: '10px',
+      background: inputMode === 'symbol' ? '#1d2a6d' : 'white',
+      color: inputMode === 'symbol' ? 'white' : '#1d2a6d',
+      border: 'none',
+      fontWeight: 700,
+      fontSize: '13px',
+      cursor: 'pointer',
+      transition: '0.3s'
+    }}>
+    🔣 Symbol
+    </button>
+    <button
+    onClick={() => { setInputMode('text'); setOriginal(null); setImage(0); }}
+    style={{
+      flex: 1,
+      padding: '10px',
+      background: inputMode === 'text' ? '#1d2a6d' : 'white',
+      color: inputMode === 'text' ? 'white' : '#1d2a6d',
+      border: 'none',
+      fontWeight: 700,
+      fontSize: '13px',
+      cursor: 'pointer',
+      transition: '0.3s'
+    }}>
+    📝 Text Input
+    </button>
+    </div>
 
-            <div className="coolinput_comp">
-
-                <label htmlFor="input" className="text">
-                    Choose:
-                </label>
-
-                <Box
-                    sx={{
-                        width: '100%',
-                        height: '85%',
-                        display: 'flex',
-                        flexDirection: 'row',
-                        border: 1,
-                        borderRadius: 2,
-                        justifyContent:'space-around'
-                    }}
-                >
-
-                    <div style={{
-                        display:'flex',
-                        flexDirection:'column'
-                    }}>
-
-                        <div id="image-box-comp">
-
-                            <div onClick={() => handleImage(0)}>
-                                <img src={plus} id="image" />
-                            </div>
-
-                            <div onClick={() => handleImage(1)}>
-                                <img src={minus} id="image" />
-                            </div>
-
-                            <div onClick={() => handleImage(2)}>
-                                <img src={multiply} id="image" />
-                            </div>
-
-                            <div onClick={() => handleImage(3)}>
-                                <img src={divide} id="image" />
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </Box>
-
-            </div>
-
+{/* SYMBOL BOX */}  
+    <div id="Choose_box_comp" style={{
+    opacity: inputMode === 'symbol' ? 1 : 0.3,
+    pointerEvents: inputMode === 'symbol' ? 'auto' : 'none',
+    transition: '0.3s'
+    }}>
+    <div className="coolinput_comp">
+    <label htmlFor="input" className="text">Choose:</label>
+    <Box sx={{
+      width: '100%', height: '85%',
+      display: 'flex', flexDirection: 'row',
+      border: 1, borderRadius: 2, justifyContent: 'space-around'
+    }}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div id="image-box-comp">
+          <div onClick={() => handleImage(0)}>
+          <img src={plus} id="image" />
+          </div>
+          <div onClick={() => handleImage(1)}>
+          <img src={minus} id="image" />
+          </div>
+          <div onClick={() => handleImage(2)}>
+          <img src={multiply} id="image" />
+          </div>
+          <div onClick={() => handleImage(3)}>
+          <img src={divide} id="image" />
+          </div>
         </div>
-    
+      </div>
+      </Box>
+      </div>
+    </div>
 
-        {/* TEXTAREA */}
-        <textarea
-            className="text_box"
-            placeholder='Enter data here'
-            value={tdata}
-            onChange={(e)=>{setTdata(e.target.value)}}
-        />
-        <button  className= "analyze-btn" onClick={handleAnalyze}>
-            Analyze Frequency
-        </button>
+{/* TEXT INPUT BOX */}
+    <textarea
+    className="text_box"
+    placeholder='Enter data here'
+    value={tdata}
+    onChange={(e) => { setTdata(e.target.value) }}
+    disabled={inputMode === 'symbol'}
+    style={{
+    opacity: inputMode === 'text' ? 1 : 0.3,
+    cursor: inputMode === 'symbol' ? 'not-allowed' : 'auto',
+    transition: '0.3s',
+    resize: 'none'
+   }}/>
+    <button  
+    ref={analyzeFreqRef}
+    className= "analyze-btn" onClick={handleAnalyze}>
+         Analyze Frequency
+     </button>
         {original && (
         <div id="row3-temp">
         <div className='preview-box'>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px' }}>
-                        {original && original.map((row, rowIndex) =>
-                        row.map((cell, cellIndex) => (
-                        <div
-                        key={`${rowIndex}-${cellIndex}`}
-                        id="huff_matrix"
-                        style={{ backgroundColor: cell === 0 ? '#0f172a' : '#f8fafc',}}
-                        ></div>
-               ))
-               )}
+            <div 
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px' }}>
+            {original && original.map((row, rowIndex) => row.map((cell, cellIndex) => (
+            <div
+            key={`${rowIndex}-${cellIndex}`}
+            id="huff_matrix"
+            style={{ backgroundColor: cell === 0 ? '#0f172a' : '#f8fafc',}}
+            ></div>
+            ))
+            )}
             </div>
         </div>
     </div>
-        )}
+    )}
 
     </div>
 
@@ -509,10 +534,10 @@ export default function HuffmanAnimation(){
     </div>
     )}
     
-
-    
     <div className="bottom-section">
-      <div className="tree-section">
+      <div 
+      ref={treeVisualizationRef}
+      className="tree-section">
         <div className="tree-header">
         TREE VISUALIZATION
         </div>
@@ -731,7 +756,9 @@ export default function HuffmanAnimation(){
 
 <div className="controls-bottom">
 
-    <button className="control-btn"
+    <button 
+    ref={generateBtnRef}
+    className="control-btn"
         onClick={handleGenerateTree}
         disabled={frequencyData.length === 0 || (showInitialNodes && !isComplete)}
         style={{ opacity: frequencyData.length === 0 || (showInitialNodes && !isComplete)
@@ -740,7 +767,9 @@ export default function HuffmanAnimation(){
         Generate
     </button>
 
-    <button className="control-btn"
+    <button 
+    ref={nextStepBtnRef}
+    className="control-btn"
         onClick={handleNextStep}
         disabled={frequencyData.length === 0 || !showInitialNodes || isComplete}
         style={{opacity: frequencyData.length === 0 || !showInitialNodes || isComplete
@@ -749,7 +778,9 @@ export default function HuffmanAnimation(){
         Next Step
     </button>
 
-    <button className="control-btn"
+    <button 
+    ref={prevStepBtnRef}
+    className="control-btn"
        onClick={handlePreviousStep}
        disabled={frequencyData.length === 0 || !showInitialNodes}
        style={{
@@ -759,7 +790,9 @@ export default function HuffmanAnimation(){
        Prev Step
        </button>
 
-    <button className="control-btn"
+    <button 
+    ref={resetBtnRef}
+    className="control-btn"
         onClick={() => {
             setCurrentStep(-1);
             setTree(null);
@@ -784,6 +817,4 @@ export default function HuffmanAnimation(){
 </div>
 </div> 
 </div> 
-        </OpenCvProvider>
-    )
-}
+</OpenCvProvider> )}

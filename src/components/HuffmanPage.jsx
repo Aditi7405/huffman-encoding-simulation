@@ -1,4 +1,4 @@
-import "../../App.css";
+import "../App.css";
 import Box from "@mui/material/Box";
 import Tabs from "@mui/material/Tabs";
 import { Menu as MenuIcon } from "@mui/icons-material";
@@ -11,31 +11,32 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Popper
 } from "@mui/material";
 import Tab from "@mui/material/Tab";
 
-import Button from "../styledbutton";
-import Select from "../styledselect";
+import Button from "./styledbutton";
+import Select from "./styledselect";
 
 import { useState, useRef, useEffect } from "react";
 
-import voice from "../../assets/images/voice-play.png";
-import voice_pause from "../../assets/images/voice-pause.png";
-import sample1 from "../../assets/images/sample1.jpg";
-import sample2 from "../../assets/images/sample2.jpg";
-import sample3 from "../../assets/images/sample3.jpg";
-import sample4 from "../../assets/images/sample4.jpg";
+import voice from "../assets/images/voice-play.png";
+import voice_pause from "../assets/images/voice-pause.png";
+import sample1 from "../assets/images/sample1.jpg";
+import sample2 from "../assets/images/sample2.jpg";
+import sample3 from "../assets/images/sample3.jpg";
+import sample4 from "../assets/images/sample4.jpg";
 import jpeg from "jpeg-js";
 
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-import HuffmanAnimation from "../HuffmanAnimation";
+import HuffmanAnimation from "./HuffmanAnimation";
 
 import { OpenCvProvider } from "opencv-react";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { createPortal } from "react-dom";
 import zIndex from "@mui/material/styles/zIndex";
+import HuffmanConceptTutor from './HuffmanConceptTutor';
 
 //returns a tab panel
 function TabPanel(props) {
@@ -200,7 +201,7 @@ export default function HuffmanPage() {
       if (stepIndexRef.current > 0) stepIndexRef.current -=1;
       setIsTutorPlaying(false);
       setTutorPaused(true);
-      speakText("You have clicked the Print button. The print dialog will now open.")
+      
     }
     window.print(); // Triggers the print dialog
   };
@@ -224,15 +225,20 @@ export default function HuffmanPage() {
   const [instructionStep, setInstructionStep] = useState(-1);
   const [tourStep, setTourStep] = useState(-1);
   const [tourWordIndex, setTourWordIndex] = useState(0);
-  const [tourMsgPos, setTourMsgPos] = useState({ top: 0, right: 10 });
+  const [tourMsgPos, setTourMsgPos] = useState({ top: 0, right: 10, left:200 });
   const [isTourPlaying, setIsTourPlaying] = useState(false);
   const [isTutorEnabled, setIsTutorEnabled] = useState(false);
   const [isTutorPlaying, setIsTutorPlaying] = useState(false);
   const [tutorPaused, setTutorPaused] = useState(false);
   const [currentTutorStep, setCurrentTutorStep] = useState(-1);
   const [tutorMessageStep, setTutorMessageStep] = useState(-1);
-  const [highlightTick, setHighlightTick] = useState(0);
   const [showTutorPrompt, setShowTutorPrompt] = useState(false);
+  const [highlightedRefKey, setHighlightedRefKey] = useState(null);
+  const [showActionPopup, setShowActionPopup] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [showActionRequired, setShowActionRequired] = useState(false);
+  const [showConceptWelcome, setShowConceptWelcome] = useState(false);
+ 
    
   function calculateEntropyMap(srcGray) {
     const kernelSize = 9;
@@ -277,25 +283,6 @@ export default function HuffmanPage() {
 
   function lossyHuffmanEncode() {
     const imgElement = document.getElementById("inputImage");
-
-    if(isTutorEnabled || isTutorPlaying || tutorPaused){
-      isTutorCancelledRef.current = true;
-      speechSynthesis.cancel();
-      if(stepIndexRef.current > 0) stepIndexRef.current -=1;
-      setIsTutorPlaying(false);
-      setTutorPaused(true);
-
-      if (selectedImage === null){
-        speakFeedback("Please select an image first from the available sample images or upload your owwn image.");
-        return;
-      }
-    
-      if (!qfactor || isNaN(qfactor) || qfactor < 1) {
-        speakFeedback("Please enter a valid quantization factor before clicking the process button.");
-        return;
-      }
-      speakFeedback("Great! You have selected an image and entered the quantization factor. Please watch the output for the entropy maps and compression ratio.")
-    }
 
     if (selectedImage === null || !imgElement) {
       notifyE("Please select an image first.");
@@ -454,7 +441,6 @@ export default function HuffmanPage() {
         setIsTutorEnabled(true);
         setTutorPaused(false);
         setIsTutorPlaying(true);
-        speakStep();
       }, 200);
     }
   };
@@ -467,6 +453,7 @@ export default function HuffmanPage() {
   const voicePlay = useRef(null);
 
   const utteranceRef = useRef(null);
+  const pausedWordIndexRef = useRef(0);
 
   useEffect(() => {
     speechSynthesis.cancel(); // Cancel any speech on reload
@@ -475,23 +462,35 @@ export default function HuffmanPage() {
   useEffect(() => {
     setShowTutorPrompt(true);
   }, []);
+
+  useEffect(() => {
+    isTourPlayingRef.current = isTourPlaying;
+  }, [isTourPlaying]);
   
   useEffect(() => {
-    if (tourStep === -1) {
-      setTourWordIndex(0);
-      return;
-    }
+    clearTimeout(highlightTimeoutRef.current);
+
+    if (!isTourPlayingRef.current) return; 
+
+    if (tourStep === -1) return;
+
     const text = tourSteps[tourStep]?.text || "";
     const word = text.split(" ");
+   
     if(tourWordIndex >= word.length) return;
-    const timer = setTimeout(() => {
+
+    highlightTimeoutRef.current = setTimeout(() => {
+
+      if(!isTourPlayingRef.current) return;
       setTourWordIndex(prev => prev + 1);
-    }, 550);
-    return () => clearTimeout(timer);
-  }, [tourWordIndex, tourStep]);
+    }, 500);
+    return () => {clearTimeout(highlightTimeoutRef.current);
+    };
+  }, [tourWordIndex, tourStep, isTourPlaying]);
 
   useEffect (() => {
     setTourWordIndex(0);
+    pausedWordIndexRef.current = 0;
   }, [tourStep]);
 
   useEffect(() => {
@@ -538,21 +537,13 @@ export default function HuffmanPage() {
     };
   }, [instructionStep, openInstructionsModal]);
 
-  const speakFeedback = (text) => {
-    console.log("speakFeedback called with:", text);
-    console.log("speechSynthesis available:", !!window.speechSynthesis);
-
-    window.speechSynthesis.cancel();
-    setTimeout(() => {
-      console.log("inside setTimeout, about to speak");
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.onStart = () => console.log("SPEECH STARTED");
-      utterance.onend = () => console.log("SPEECH ENDED");
-      utterance.onerror = () => console.log("SPEECH ERROR:", e.error);
-      window.speechSynthesis.speak(utterance);
-      console.log("speak() called, speaking:", window.speechSynthesis.speaking);
-    }, 300);
-  };
+   useEffect(() => {
+      if(openHuffmanModal) {
+        setTimeout(() => setShowConceptWelcome(true),500);
+      } else {
+        setShowConceptWelcome(false);
+      }
+    }, [openHuffmanModal]);
 
   const stepIndexRef = useRef(0);
   const isTourCancelledRef = useRef(false);
@@ -560,6 +551,7 @@ export default function HuffmanPage() {
   const wasTutorActiveRef = useRef(false);
   const guidedTutorBtnRef = useRef(null);
   const instructionButtonRef = useRef(null);
+  const speechButtonRef = useRef(null);
   const currentTutorStepRef = useRef(-1);
   const toolboxRef = useRef(null);
   const chooseImageRef = useRef(null);
@@ -570,39 +562,8 @@ export default function HuffmanPage() {
   const outputSectionRef = useRef(null);
   const printButtonRef = useRef(null);
   const conceptButtonRef = useRef(null);
-
-
-const tutorSteps = [
-  { text: "Welcome! Let me guide you through this experiment.", ref: guidedTutorBtnRef },
-  { text: "Click Instructions to see the procedure.", ref: instructionButtonRef },
-  { text: "This is the Lossy Huffman Tools panel.", ref: toolboxRef },
-  { text: "Select an image from the available options.", ref: chooseImageRef },
-  { text: "You can also upload your own image.", ref: uploadButtonRef },
-  { text: "Enter a quantization factor here.", ref: quantizationRef },
-  { text: "This is the Input Image section.", ref: inputImageRef },
-  { text: "Click Process to generate output.", ref: processButtonRef },
-  { text: "The output and compression ratio appear here.", ref: outputSectionRef },
-  { text: "Click Print to save or print your result.", ref: printButtonRef },
-  { text: "Click Concept to see how Huffman Encoding works.", ref: conceptButtonRef },
-];
-
-const getHightlightStyle = (ref) => {
-  if(!isTutorPlaying && !tutorPaused) return {};
-
-  const activeStep = currentTutorStepRef.current;
-  if (activeStep < 0 || activeStep >= tutorSteps.length) return {};
-  const activeRef = tutorSteps[activeStep]?.ref;
-  if (!activeRef || activeRef !== ref) return {};
-
-  return {
-    boxShadow: "0 0 0 4px rgba(245, 158, 11, 0.9)",
-    borderRadius: "12px",
-    transition: "all 0.3s ease",
-    animation: "pulseHighlight 1.2s infinite",
-    position: "relative",
-    zIndex: 5,
-  };
-};
+  const highlightTimeoutRef = useRef(null);
+  const isTourPlayingRef = useRef(false);
 
 const startGuidedTutor = () => {
   setShowTutorPrompt(false);
@@ -611,21 +572,34 @@ const startGuidedTutor = () => {
   setTutorPaused(false);
   stepIndexRef.current = 0;
   currentTutorStepRef.current = 0;
-  speakStep();
 };
 
 const handleTutorToggle = () => {
-  if (isTutorPlaying) {
-    isTutorCancelledRef.current = true;
-    speechSynthesis.cancel();
-    setIsTutorPlaying(false);
-    setTutorPaused(true);
-  } else {
-    isTutorCancelledRef.current = false;
-    setIsTutorEnabled(true);
-    setIsTutorPlaying(true);
-    setTutorPaused(false);
-    speakStep();
+  if (isTourPlaying) {
+    pausedWordIndexRef.current = tourWordIndex;
+
+    clearTimeout(highlightTimeoutRef.current);
+
+    isTourPlayingRef.current = false;
+
+    window.speechSynthesis.cancel();
+    
+    setIsTourPlaying(false);
+    return;
+  } if (tourStep === -1) {
+    startTour();
+    return;
+  }
+  setTourWordIndex(0);
+  pausedWordIndexRef.current = 0;
+
+  isTourPlayingRef.current = true;
+
+  setIsTourPlaying(true);
+
+  const step = tourSteps[tourStep];
+  if(step) {
+    speakTourText(step.text);
   }
 };
 
@@ -644,7 +618,6 @@ const speakStep = () => {
   // PEHLE highlight update karo
   currentTutorStepRef.current = stepIndexRef.current;
   setCurrentTutorStep(stepIndexRef.current);
-  setHighlightTick(prev => prev + 1);
 
   if (step.ref?.current) {
     step.ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -664,7 +637,6 @@ const speakStep = () => {
     utterance.onend = () => {
       if (isTutorCancelledRef.current) return;
       stepIndexRef.current += 1;
-      speakStep();
     };
 
     utterance.onerror = () => {
@@ -706,49 +678,81 @@ const speakStep = () => {
       "Click the Print button to print the result.",
     ],
   };
+  
+  const tourPosMap = {
+    guidedTutor: {top: 60, right: 390},
+    instruction: {top:60, right: 550},
+    speech: {top: 60, right: 650},
+    toolbox: {top: 620, right: 1200},
+    chooseImage: {top: 180, right: 900},
+    upload: {top: 400, left: 320},
+    inputImage: {top: 550, right: 700},
+    quantization: {top:620, right: 1200},
+    process: {top: 630, right: 750},
+    output: {top: 550, right: 400},
+    print: {top:630, right: 550},
+    concept: {top:630, right: 270}
+  };
 
   const tourSteps = [
   {
+    title: "Guided Tutor",
     text: "Welcome to the Lossy Huffman Encoding experiment! I will guide you through the experiment interface and workflow.",
     refKey: "guidedTutor",
   },
   {
+    title: "Instruction Button",
     text: "This is the Instructions button. Click here at any time to view the detailed procedure for performing experiment.",
     refKey: "instruction",
   },
   {
+    title: "Speech box",
+    text: "This is the button from where you can play/pause your guided tutor.",
+    refKey: "speech",
+  },
+  {
+    title:"Tool Panel",
     text: "This is the Lossy Huffman Tools panel. It contains all the utilities you need to perform the experiment.",
     refKey: "toolbox",
   },
   {
+    title: "Image Box",
     text: "In this section, you can select a sample image for processing. Click on any image to choose it as the input.",
     refKey: "chooseImage",
   },
   {
+    title:"Upload Button",
     text: "You can also upload your own image by clicking the Upload File button.",
     refKey: "upload",
   },
   {
-    text: "Enter a valid Quantization Factor value here. It controls the level of compression.",
-    refKey: "quantization",
-  },
-  {
+    title: "Input Image Box",
     text: "This is the Input Image section, where the selected or uploaded image will be displayed before processing.",
     refKey: "inputImage",
   },
   {
+    title: "Quantization Value",
+    text: "Enter a valid Quantization Factor value here. It controls the level of compression.",
+    refKey: "quantization",
+    requiresInput: true,
+  },
+  {
+    title: "Process Button",
     text: "Once you have selected an image and entered the quantization factor, click the Process button to generate the output.",
     refKey: "process",
   },
   {
+    title: "Output Box",
     text: "The processed output image, entropy maps and compression ratio will appear in this section.",
     refKey: "output",
   },
   {
+    title: "Print Button",
     text: "Click the Print button to print or save the generated result.",
     refKey: "print",
   },
   {
+    title:"Concept Button",
     text: "Click the Concept button to understand how Huffman Encoding works through a step by step animation.",
     refKey: "concept",
   },
@@ -762,6 +766,7 @@ const getRefByKey = (key) => {
   const map = {
     guidedTutor: guidedTutorBtnRef,
     instruction: instructionButtonRef,
+    speech: speechButtonRef,
     toolbox: toolboxRef,
     chooseImage: chooseImageRef,
     upload: uploadButtonRef,
@@ -777,15 +782,47 @@ const getRefByKey = (key) => {
 
 const updateTourPos = (refKey) => {
   const ref = getRefByKey(refKey);
-  if (ref?.current) {
-    const rect = ref.current.getBoundingClientRect();
-    setTourMsgPos({
-      top: rect.bottom + 12,
-      right: window.innerWidth - rect.right,
-    });
-    ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (!ref?.current) return;
+
+  const pos = tourPosMap[refKey];
+  if (pos) {
+    setTourMsgPos(pos);
   }
+
+  ref.current.scrollIntoView({behavior: "smooth", block: "center"});
 };
+
+ {/*} const rect = ref.current.getBoundingClientRect();
+  const vpW = window.innerWidth;
+  const vpH = window.innerHeight;
+  const popupW = 320;
+  const popupH = 200;
+  const gap = 12;
+
+  let top, right, left;
+
+  if (refKey === "chooseImage"){
+    setTourMsgPos({top: 180, right: 900});
+    ref.current.scrollIntoView({behavior: "smooth", block: "center"});
+    return;
+  }
+
+  if (vpH - rect.bottom >= popupH + gap) {
+    top = rect.bottom + gap;
+  } else {
+    top = rect.top - popupH - gap;
+  }
+
+  right = vpW - rect.right;
+  left = rect.left;
+
+  top   = Math.max(8, Math.min(top, vpH - popupH - 8));
+  right = Math.max(8, Math.min(right, vpW - popupW - 8));
+  left = Math.max(8, Math.min(left, vpW - popupW - 8));
+
+  setTourMsgPos({ top, right, left});
+  ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};   */}
 
 const speakTourText = (text, onDone) => {
   window.speechSynthesis.cancel();
@@ -803,33 +840,86 @@ const speakTourText = (text, onDone) => {
 };
 
 const goToStep = (index) => {
-  if (index >= tourSteps.length) {
+  setShowActionRequired(false);
+  if (index < 0 || index >= tourSteps.length) {
+
     setTourStep(-1);
     setIsTourPlaying(false);
     setTourWordIndex(0);
+    setHighlightedRefKey(null);
+    setAnchorEl(null);
     return;
   }
+
+  setIsTourPlaying(true);
+
   const step = tourSteps[index];
+  const ref = getRefByKey(step.refKey);
+  setAnchorEl(ref?.current ?? null);
+
+  setHighlightedRefKey(step.refKey);
+  window.speechSynthesis.cancel();
   setTourStep(index);
   setTourWordIndex(0);
   updateTourPos(step.refKey);
   speakTourText(step.text);
 };
 
+const handleNextTourStep = () => {
+  console.log("tourStep:", tourStep);
+  console.log("refKey:", tourSteps[tourStep]?.refKey);
+  console.log("qfactor:", qfactor);
+  console.log("showActionRequired:", showActionRequired);
+  if (
+    tourSteps[tourStep]?.refKey === "quantization" &&
+    (!qfactor || qfactor <= 0)
+  ) {
+    setShowActionRequired(true);
+    return;
+  }
+
+  setShowActionRequired(false);
+
+  if (tourSteps[tourStep]?.refKey === "quantization") {
+    const processStep = tourSteps.findIndex(s => s.refKey === "process");
+    if (processStep !== -1){
+      goToStep(processStep);
+      return;
+    }
+  }
+  goToStep(tourStep + 1);
+};
+
 const startTour = () => {
   isTourCancelledRef.current = false;
+  isTourPlayingRef.current = true;
   setIsTourPlaying(true);
   goToStep(0);
 };
 
 const stopTour = () => {
   isTourCancelledRef.current = true;
+  setHighlightedRefKey(null);
   window.speechSynthesis.cancel();
   setTourStep(-1);
   setIsTourPlaying(false);
   setTourWordIndex(0);
 };
 
+const goBackStep = () => {
+  if (tourStep <= 0) return;
+  
+  goToStep(tourStep - 1);
+};
+
+const getHighlightStyle = (refKey) => {
+  if(highlightedRefKey !== refKey) return{};
+  return{
+    boxShadow: "0 0 0 3px rgba(245, 158,11,0.9), 0 0 20px rgba(245,158,11,0.5)",
+    //borderRadius: "8px",
+    transition: "all 0.3s ease",
+  };
+};
 
   const getInstructions = () => {
     const steps = instructionsList[indexTabValue];
@@ -868,33 +958,39 @@ const stopTour = () => {
   };
   
 const handleConceptClick = () => {
-  if (isTutorEnabled || isTutorPlaying || tutorPaused) {
-    isTutorCancelledRef.current = true;
-    speechSynthesis.cancel();
-    if (stepIndexRef.current > 0) stepIndexRef.current -= 1;
-    setIsTutorPlaying(false);
-    setTutorPaused(true);
-    speakFeedback("You clicked the Concept button. This will show you a step by step animation explaining how Huffman Encoding works.");
-    return;
-  }
+  window.speechSynthesis.cancel();
+  clearTimeout(highlightTimeoutRef.current);
+  setIsTourPlaying(false);
+  setTourStep(-1);
+  setTourWordIndex(0);
+  pausedWordIndexRef.current = 0;
+
   exp2();
+  setShowTutorPrompt(true);
 };
 
 const handleProcessClick = () => {
-  console.log("handleProcessClick called");
-  console.log("isTutorEnabled:", isTutorEnabled);
-  console.log("isTutorPlaying:", isTutorPlaying);
-  console.log("tutorPaused:", tutorPaused);
   if (isTutorEnabled || isTutorPlaying || tutorPaused) {
     isTutorCancelledRef.current = true;
     speechSynthesis.cancel();
-    if(stepIndexRef.current > 0) stepIndexRef.current -= 1;
+   if(stepIndexRef.current > 0) stepIndexRef.current -= 1;
     setIsTutorPlaying(false);
-    setTutorPaused(true);
-    speakFeedback("You clicked the Process button. Make sure you have selected an image and enetred a valid quantization factor, the click Process to generate the output.");
-    return;
+    setTutorPaused(false);
+    setIsTutorEnabled(false);
+    setHighlightedRefKey(null);
+    setTourStep(-1);
   }
   lossyHuffmanEncode();
+  setTimeout(() => {
+    const outputStep = tourSteps.findIndex(s => s.refKey === "output");
+    if (outputStep !== -1){
+      setIsTutorEnabled(true);
+      setIsTourPlaying(true);
+      isTourPlayingRef.current = true;
+      isTutorCancelledRef.current = false;
+      goToStep(outputStep);
+    }
+  }, 1500);
 }
 
   return (
@@ -910,13 +1006,24 @@ const handleProcessClick = () => {
           {/* Tabs for Desktop */}
 
           <h2 className="header-heading">Huffman Encoding</h2>
-          <div id="header_button" style={{display: "flex", 
+          <div id="header_button" 
+          ref={speechButtonRef}
+          style={{display: "flex", 
               alignItems:"center",
               gap: "12px",
               marginLeft:"auto", 
               position:"relative"}}>
+              <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginRight: "8px"
+              }}>
             <Button title="Play" ref={voicePlay} onClick={handleTutorToggle}
-            style={{ display: isTutorPlaying? "none" : "inline-flex"}}>
+            style={{ display: isTourPlaying? "none" : "inline-flex",
+            minWidth: "unset",
+            padding: "0px",
+            marginRight: "-8px"}}>
               <img
                 src={voice}
                 alt="voice"
@@ -925,46 +1032,65 @@ const handleProcessClick = () => {
             </Button>
 
             <Button ref={voicePause} title="Pause" onClick={handleTutorToggle}
-            style={{ display: isTutorPlaying ? "inline-flex" : "none"}}>
+            style={{ display: isTourPlaying ? "inline-flex" : "none",
+            minWidth: "unset",
+            padding: "0px",
+            marginRight:"-8px"}}>
               <img
                 src={voice_pause}
                 alt="voice"
                 style={{ width: "40px", height: "auto" }}
               />
             </Button>
+            </div>
        
             <Button 
             ref={instructionButtonRef}
-            style={{ color: "#D1D3D8",
-            ...(tutorMessageStep === 1 ? {
-              boxShadow: "0 0 15px rgba(255, 165, 0, 0.6)",
-            } : {}) 
-            }} onClick={instr}>
-              <strong>instructions</strong>
+            onClick={instr}
+            style={{ 
+              background:  "white",
+              color: "#1d2a6d",
+              fontWeight: 600,
+              padding: "8px 18px",
+              borderRadius: "10px",
+              textTransform: "none",
+              cursor: "pointer",
+              boxShadow: "0 6px 15px rgba(29, 42, 109, 0.3)",
+              transition: "0.3s ease",
+              whiteSpace: "nowrap",
+              fontSize: "14px",
+              width: "145px",
+              height: "42px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px solid #333",
+              ...(tutorMessageStep === 1 ? {
+              boxShadow: "0 0 15px rgba(255, 165, 0, 0.6)",  
+            } : {}),
+            ...getHighlightStyle("instruction"),
+            }} 
+            onMouseEnter={e => {
+              e.currentTarget.style.background = "#d0dcf5";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = "#eaf0fb";
+            }}
+            >
+              INSTRUCTIONS
             </Button>
 
             <button 
             ref={guidedTutorBtnRef}
+            className="guided-tutor-btn"
             onClick={() => { 
-              if (tourStep >= 0) {
+              if (isTourPlaying || tourStep >= 0) {
                 stopTour();
               } else {
-                setShowTutorPrompt(true);
+                startTour();
               }
-            }}
-               style={{
-                background: tourStep >=0 ?"#ff4444" : "yellow",
-                color: "#1d2a6d",
-                fontWeight: 600,
-                padding: "8px 18px",
-                borderRadius: "10px",
-                textTransform: "none",
-                cursor: "pointer",
-                boxShadow: "0 6px 15px rgba(29, 42, 109, 0.3)",
-                transition: "0.3s ease",
-                whiteSpace: "nowrap",
-               }}>
-              {tourStep >= 0 ? "Stop Tour" : "Guided Tutor"}
+            }}>
+                Guided Tutor
             </button>
            </div>
 
@@ -997,26 +1123,11 @@ const handleProcessClick = () => {
               gap: "12px",
               marginBottom: "12px"
             }}>
-            <div 
-            style={{
-              width: "50px",
-              height: "50px",
-              borderRadius: "50%",
-              background: "#1D2A6D",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-              color: "white",
-              fontSize: "22px",
-              fontWeight: "bold",
-            }}>
-            <SmartToyIcon style={{fontSize: "28px", color: "white"}}/>
-            </div>
+            
             <div>
-            <h3 style={{ margin: 0, color: "#1d2a6d" ,marginBottom: "10px", fontSize: "14px", fontWeight: "700"}}>
+            <h2 style={{ margin: 0, color: "#1d2a6d" ,marginBottom: "10px", fontSize: "14px", fontWeight: "700"}}>
             Guided Tutor is here to help!
-            </h3>
+            </h2>
             <p style={{
               fontSize: "14px",
               color: "#444",
@@ -1033,7 +1144,6 @@ const handleProcessClick = () => {
             }}>
 
             <button onClick={() => {
-              setIsTutorEnabled(false);
               setShowTutorPrompt(false);
               
             }}
@@ -1053,79 +1163,98 @@ const handleProcessClick = () => {
             <button onClick={() => {
               setIsTutorEnabled(true);
               setShowTutorPrompt(false);
-              
-
-              startTour();
-              
+              setTimeout(() => {
+                isTourCancelledRef.current = false;
+                isTourPlayingRef.current = true;
+                startTour();
+              }, 150);              
             }}
             style={{
-                    background: "#1d2a6d",
-                    color: "white",
-                    border: "none",
-                    padding: "8px 20px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    fontWeight: "600",
-                    fontSize: "14px",
-                  }}>
-                    Yes, Please
-                  </button>
-            </div>
-            </div>
-            </div>
-            </div>
-           )}
+              background: "#1d2a6d",
+              color: "white",
+              border: "none",
+              padding: "8px 20px",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+            }}>
+              Yes, Please
+            </button>
+          </div>
+        </div>
+      </div>
+      </div>
+      )}
 
-          {tourStep >= 0 && createPortal(
-            <div style={{
+      {tourStep >= 0 && createPortal(
+          <div style={{
               position: "fixed",
-              top: `${tourMsgPos.top}px`,
               right: `${tourMsgPos.right}px`,
-              width: "300px",
+              top: `${tourMsgPos.top}px`,
+              width: "320px",
               background: "linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))",
               borderRadius: "18px",
               padding: "16px",
               boxShadow: "0 8px 25px rgba(0,0,0,0.15)",
               zIndex: 9999,
+            }}>   
+            <div style={{
+              textAlign: "center",
+              fontSize: "16px",
+              fontWeight: "700",
+              color: "#1d2a6d",
+              marginBottom: "12px",
+              borderBottom: "1px solid #cbd5e1",
+              paddingBottom: "8px",
             }}>
+            {showActionRequired
+            ? "⚠️ Action Required"
+            : tourSteps[tourStep]?.title}
+            </div>
+            
             <div style={{
-              position: "absolute",
-              top: "-10px",
-              right: "20px",
-              width: 0,
-              height: 0,
-              borderLeft: "10px solid transparent",
-              borderRight: "10px solid transparent",
-              borderBottom: "10px solid #bfdbfe",
-            }}/>
-            <div style={{
-              fonstSize: "14px",
+              fontSize: "14px",
               color: "#333",
               lineHeight: "1.6",
               fontWeight: "500",
               marginBottom: "18px",
             }}>
-            {tourSteps[tourStep]?.text.split(" ").map((word, i) => (
-              <span key={i} style={{
-                padding: "1px 3px",
-                marginRight: "3px",
-                borderRadius: "4px",
-                display: "inline-block",
-                background: i === tourWordIndex ? "#fff8e1" : "transparent",
-                color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
-                fontWeight: i === tourWordIndex ? "600" : "400",
-                borderBottom: i === tourWordIndex ? "2px  solid #f59e0b" : "2px solid transparent",
-                transition: "all 0.15s ease",
-              }}>
-                {word}
-              </span>
-            ))}
-            </div>
+          {showActionRequired ? (
+            <>
+            Please enter a valid Quantization Factor before proceeding.
+            </>
+          ) : (
+            tourSteps[tourStep]?.text.split(" ").map((word, i) => (
+      <span
+        key={i}
+        style={{
+          padding: "1px 3px",
+          marginRight: "3px",
+          borderRadius: "4px",
+          display: "inline-block",
+          background:
+            i === tourWordIndex ? "#fff8e1" : "transparent",
+          color:
+            i === tourWordIndex ? "#92400e" : "#1d2a6d",
+          fontWeight:
+            i === tourWordIndex ? "600" : "400",
+        }}
+      >
+        {word}
+      </span>
+    ))
+    )}
+  </div>
             <div style={{
               display: "flex",
               justifyContent: "space-between",
-              alignItems: "center",
+              alignItems: "flex-start",
+              flexWrap: "wrap",
+              gap: "10px",
+              marginTop: "12px"
             }}>
+            <div style={{display: "flex", gap: "10px"}}>
             <button onClick={stopTour}
             style={{
               background: "transparent",
@@ -1137,24 +1266,51 @@ const handleProcessClick = () => {
               cursor: "pointer",
               fontSize: "14px",
             }}>
-              Close
+              EXIT
             </button>
-            <button onClick={() => goToStep(tourStep + 1)}
+            <button 
+            onClick={() => {
+              setShowActionRequired(false);
+              goToStep(tourStep - 1);
+            }}
+            disabled={tourStep === 0}
             style={{
-              background: "#1d2a6d",
+              background: "#d1d5db",
+              color: "#1d2a6d",
+              border: "1px solid #1d2a6d",
+              padding: "8px 18px",
+              borderRadius: "10px",
+              cursor: tourStep === 0 ? "not-allowed" : "pointer",
+              fontWeight: "600",
+              fontSize: "14px"
+            }}>
+              Back
+            </button>
+            </div>
+            <button
+            onClick={handleNextTourStep}
+            disabled={showActionRequired && (!qfactor || qfactor <= 0)}
+            style={{
+              background: (showActionRequired && (!qfactor || qfactor <= 0))
+              ? "#9ca3af"
+              : "#1d2a6d",
               color: "white",
               border: "none",
               padding: "8px 18px",
               borderRadius: "10px",
-              cursor: "pointer",
+              cursor: (showActionRequired && (!qfactor || qfactor <= 0))
+              ? "not-allowed"
+              : "pointer",
               fontWeight: "600",
+              transition: "all 0.3s ease",
             }}>
-              {tourStep === tourSteps.length -1 ? "Finish" : "Next"}
-            </button>
-            </div>
-            </div>,
+             {tourStep === tourSteps.length - 1 ? "Finish" : "Next"}
+            </button> 
+          </div>
+          </div>,
             document.body
           )}
+
           <Dialog
            open={openInstructionsModal}
            onClose={handleCloseModal}
@@ -1165,7 +1321,6 @@ const handleProcessClick = () => {
           }}>
   {/* ── Navy Header ── */}
   <Box 
-  style={getHightlightStyle(instructionButtonRef)}
    sx={{
     background: '#1d2a6d',
     padding: '12px 20px'
@@ -1195,22 +1350,7 @@ const handleProcessClick = () => {
       return (
         <>
           <ol style={{
-            margin: '0 0 12px',
-            //paddingLeft: '22px',
-            //fontSize: '14px',
-            //lineHeight: '1.9',
-            //color: '#333'
-          }}>
-            {/*{normalSteps.map((step, idx) => {
-              const html = step.replace(
-                /(Upload File|Process|Print|Analyze Frequency|Generate|Next Step|Reset)/g,
-                '<strong>$1</strong>'
-              );
-              return (
-                <li key={idx} dangerouslySetInnerHTML={{ __html: html }} />
-              );
-            })}*/}
-
+            margin: '0 0 12px'}}>
             {normalSteps.map((step, idx) => {
               const html = step.replace(
                 /(Upload File|Process|Print|Analyze Frequency|Generate|Next Step|Reset)/g,
@@ -1295,72 +1435,39 @@ const handleProcessClick = () => {
   </DialogActions>
 
 </Dialog>
-          {/* Instructions Modal 
-          <Dialog
-            open={openInstructionsModal}
-            onClose={handleCloseModal}
-            aria-labelledby="instructions-dialog-title"
-            aria-describedby="instructions-dialog-description"
-            style={{ height: "80%" }}
-          >
-            <DialogTitle id="instructions-dialog-titlle"> 
-              Instructions
-            </DialogTitle>
-            <DialogContent style={{ paddingTop: "10px" }}>
-              <p style={{ color: "#1D2A6D", fontWeight: "bold" }}>
-                {tabValue === 0
-                  ? "Run Length Encoding"
-                  : tabValue === 1
-                    ? "Lossy Huffman"
-                    : tabValue === 2
-                      ? "Sine and Cosine"
-                      : "JPEG Compression"}
-                :
-              </p>
-              {getInstructions()}
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={handleCloseModal} color="primary">
-                Close
-              </Button>
-            </DialogActions> 
+</div>
 
-            </div>
-
-            </div>
-          </Dialog> */}
-        </div>
-
-        <div id="mainbox">
-          <TabPanel tabValue={tabValue} index={1}>
-            <div class="flex-container">
-              <div class="flex-item-left">
-                <div id="left_bar">
-                  <Box 
-                    ref={toolboxRef}
-                    style={getHightlightStyle(toolboxRef)}
-                    sx={{
-                      width: "100%",
-                      height: "85%",
-                      display: "flex",
-                      flexDirection: "column",
-                      border: 1,
-                      borderColor: "divider",
-                      borderRadius: 2,
-                      backgroundColor: "#ffffffff",
-                      boxShadow: `
+  <div id="mainbox">
+    <TabPanel tabValue={tabValue} index={1}>
+      <div class="flex-container">
+        <div class="flex-item-left">
+           <div id="left_bar">
+             <Box 
+                ref={toolboxRef}
+                style={getHighlightStyle("toolbox")}
+                sx={{
+                  width: "100%",
+                  height: "85%",
+                  display: "flex",
+                  flexDirection: "column",
+                  border: 1,
+                  borderColor: "divider",
+                  borderRadius: 2,
+                  backgroundColor: "#ffffffff",
+                  boxShadow: `
                           0 4px 8px rgba(0,0,0,0.15),
                           0 8px 16px rgba(0,0,0,0.10),
                           0 16px 24px rgba(0,0,0,0.05)`,
 
-                      transition: "all 0.3s ease-in-out",
-                      "&:hover": {
+                  transition: "all 0.3s ease-in-out",
+                    
+                  "&:hover": {
                         transform: "translateY(-4px)",
                         boxShadow: `0 6px 12px rgba(0,0,0,0.2),
                                     0 12px 24px rgba(0,0,0,0.15),
                                     0 20px 40px rgba(0,0,0,0.1) `,
-                      },
-                     }} >
+                  },
+                  }} >
                     <Box
                       sx={{
                         p: 0,
@@ -1397,8 +1504,7 @@ const handleProcessClick = () => {
                       }}
                     >
                       <div  ref={chooseImageRef}
-                      class="contentog"             
-                      style={getHightlightStyle(chooseImageRef)}>
+                      class="contentog" >           
                         <h4
                           style={{
                             margin: "5px 0px",
@@ -1410,6 +1516,7 @@ const handleProcessClick = () => {
                         </h4>
                         <div
                           className="image-grid"
+                          style={getHighlightStyle("chooseImage")}
                           sx={{
                             width: "100%",
                             position: "relative",
@@ -1426,8 +1533,7 @@ const handleProcessClick = () => {
                               alignItems: "center",
                               gap: "5px",
                               marginBottom: "5px",
-                            }}
-                          >
+                            }}>
                             <div
                               className="gridImage gridImageOne"
                               onClick={() => handleImageClick(0)}
@@ -1486,7 +1592,8 @@ const handleProcessClick = () => {
                          textAlign: "center",}}>
                           <label htmlFor="file-upload" className="upload-btn"
                           ref={uploadButtonRef}
-                          style={getHightlightStyle(uploadButtonRef)}>
+                          style={getHighlightStyle("upload")}
+                          >
                             <svg
                               className="upload-icon"
                               viewBox="0 0 24 24"
@@ -1528,7 +1635,13 @@ const handleProcessClick = () => {
                           className="derivative-btn"
                           type="text"
                           value={qfactor}
-                          onChange={(e) => setQfactor(Number(e.target.value))}
+                          onChange={(e) => {
+                          const value = Number(e.target.value);
+                          setQfactor(value);
+                          if (value > 0) {
+                            setShowActionRequired(false);
+                          }
+                          }}
                           placeholder="Enter std threshold"
                           style={{
                             background: "#e8ecf3",
@@ -1537,7 +1650,7 @@ const handleProcessClick = () => {
                             padding: "5px",
                             border: "1px solid #1D2A6D",
                             borderRadius: "10px",
-                            ...getHightlightStyle(quantizationRef)
+                            ...getHighlightStyle("quantization"), 
                           }}
                         />
                       </div>
@@ -1557,7 +1670,6 @@ const handleProcessClick = () => {
                 <div class="input_output" style={{ height: "70%" }}>
                   <div id="sampling_area">
                     <Box ref={inputImageRef}
-                    style={getHightlightStyle(inputImageRef)}
                       sx={{
                         width: "50%",
                         height: "100%",
@@ -1572,12 +1684,10 @@ const handleProcessClick = () => {
                         boxShadow:
                           isInputImageAnimationPlaying === true
                             ? `0 0 0 3px rgba(28, 42, 109, 0.25),
-           0 8px 24px rgba(28, 42, 109, 0.35)`
-                            : `
-           0 4px 8px rgba(0,0,0,0.15),
-           0 8px 16px rgba(0,0,0,0.10),
-           0 16px 24px rgba(0,0,0,0.05)
-         `,
+                               0 8px 24px rgba(28, 42, 109, 0.35)`
+                            : `0 4px 8px rgba(0,0,0,0.15),
+                               0 8px 16px rgba(0,0,0,0.10),
+                               0 16px 24px rgba(0,0,0,0.05)`,
                         transform: isInputImageAnimationPlaying
                           ? "scale(1.02)"
                           : "scale(1)",
@@ -1588,7 +1698,9 @@ const handleProcessClick = () => {
                         "&:hover": {
                           transform: "translateY(-4px)",
                         },
+                        ...getHighlightStyle("inputbox"),
                       }}
+                      
                     >
                       <Box 
                         sx={{
@@ -1624,7 +1736,7 @@ const handleProcessClick = () => {
                       </Box>
                     </Box>
                     <Box ref={outputSectionRef}
-                    style={getHightlightStyle(outputSectionRef)}
+                    
                       sx={{
                         width: "auto",
                         height: "100%",
@@ -1639,12 +1751,10 @@ const handleProcessClick = () => {
                         boxShadow:
                           isAnimationPlaying === true
                             ? `0 0 0 3px rgba(28, 42, 109, 0.25),
-           0 8px 24px rgba(28, 42, 109, 0.35)`
-                            : `
-           0 4px 8px rgba(0,0,0,0.15),
-           0 8px 16px rgba(0,0,0,0.10),
-           0 16px 24px rgba(0,0,0,0.05)
-         `,
+                               0 8px 24px rgba(28, 42, 109, 0.35)`
+                            : ` 0 4px 8px rgba(0,0,0,0.15),
+                                0 8px 16px rgba(0,0,0,0.10),
+                                0 16px 24px rgba(0,0,0,0.05)`,
                         transform: isAnimationPlaying
                           ? "scale(1.02)"
                           : "scale(1)",
@@ -1656,6 +1766,7 @@ const handleProcessClick = () => {
                           transform: "translateY(-4px)",
                         },
                       }}
+                      style={getHighlightStyle("output")}
                     >
                       <Box 
                         sx={{
@@ -1743,7 +1854,8 @@ const handleProcessClick = () => {
                     ref={processButtonRef}
                     // ref={myProcess2Button}
                     class="tool_btn"
-                    style={getHightlightStyle(processButtonRef)}
+                    style={getHighlightStyle("process")}
+                    
                     onClick={handleProcessClick}
                     variant="outlined"
                     sx={{ borderColor: "#1D2A6D", color: "#1D2A6D" }}
@@ -1758,7 +1870,8 @@ const handleProcessClick = () => {
                   <Button
                     ref={printButtonRef}
                     class="tool_btn print_btn"
-                    style={getHightlightStyle(printButtonRef)}
+                    style={getHighlightStyle("print")}
+                    
                     onClick={handlePrint}
                     variant="outlined"
                     sx={{ borderColor: "#1D2A6D", color: "#1D2A6D" }}
@@ -1770,9 +1883,10 @@ const handleProcessClick = () => {
                   </Button>
                    <Button
                     ref={conceptButtonRef}
+                    style={getHighlightStyle("concept")}
                     class="tool_btn"
-                    style={getHightlightStyle(conceptButtonRef)}
-                    onClick={exp2}
+                    
+                    onClick={handleConceptClick}
                     variant="outlined"
                     sx={{ borderColor: "#1D2A6D", color: "#1D2A6D" }}
                   >
@@ -1792,151 +1906,10 @@ const handleProcessClick = () => {
                 </div>
                 {/* ToastContainer must be placed somewhere in the component tree */}
                 <ToastContainer />
-                {/* Explanation Modal */}
-                <Dialog
-                  open={openHuffmanModal}
-                  onClose={handleClose3Modal}
-                  aria-labelledby="explanation-dialog-title"
-                  aria-describedby="explanation-dialog-description"
-                  PaperProps={{
-                    id: "explanation-dialog",
-                  }}
-                >
-                  <DialogTitle id="instructions-dialog-title"
-                  sx={{ 
-                        backgroundColor: '#1d2a6d',
-                        color: 'white',
-                        display: 'flex',
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '12px 24px'
-                        }}>
-
-                  <span style ={{fontSize: '20px', fontWeight: '600'}}>Huffman Concept</span> 
-                  <div style={{ display: 'flex', gap: '10px'}}>
-                  <button onClick={() => setShowInstructions(true)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'white',
-                    fontSize: '15px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    letterSpacing: '0.5px'
-                  }}>
-                    INSTRUCTIONS
-                  </button>   
-                  <button onClick={handleClose3Modal}
-                  style={{
-                    background: 'white',
-                    color: '#1d2a6d',
-                    border: '2px solid #1d2a6d',
-                    borderRadius: '8px',
-                    padding: '6px 16px',
-                    fontWeight: '600',
-                    cursor: 'pointer', 
-                    fontSize: '14px'
-                  }}
-                  onMouseEnter={e => {
-                    e.target.style.backgroundColor = 'white';
-                    e.target.style.color = '#1d2a6d';
-                  }}
-                  onMouseLeave={e => {
-                    e.target.style.backgroundColor = 'white';
-                    e.target.style.color = '#1d2a6d';
-                  }}
-                   >
-                    Close
-                  </button>
-                  </div>
-                  </DialogTitle>
-
-                  <DialogContent
-                    sx={{ padding: "0px", height: "1200px" }}>
-                    {showInstructions && (
-                      <Box style={{
-                        position: 'absolute',
-                        inset: 0,
-                        backgroundColor: 'rgba(0,0,0,0.6)',
-                        zIndex: 9999,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}>
-                        <Box sx={{
-                          background: 'white',
-                          borderRadius: '8px',
-                          //padding: '28px',
-                          maxWidth: '580px',
-                          width: '90%',
-                          position: 'relative',
-                          overflow: 'hidden'
-                        }}>
-
-                        <Box sx={{background: '#1a3a5c' , padding: '12px 20px'}}>
-                          <span style={{color: 'white', fontSize: '20px', fontWeight: 600}}>
-                            Instructions of Huffman Encoding:
-                          </span>
-                        </Box>
-                        
-                          <Box sx={{padding: '20px 24px 8px'}}>
-                          
-                            <p style={{fontSize: '14px', color:'#333', margin: '0 0 10px'}}>
-                            <strong>Step 1 - </strong> Select a symbol imaage (+ - &times; &divide;) from Choose box or type your own text in the text box. </p>
-                            <p style={{ fontSize: '14px', color: '#333', margin: '0 0 10px'}}>
-                            <strong>Step 2 - </strong>  Click the <b>"Analyze Frequency"</b> button.The frequency table will be generated. </p>
-                            <p style={{ fontSize: '14px', color:'#333', margin: '0 0 10px'}}>
-                            <strong>Step 3 - </strong> Click teh <b>"Generate"</b> button. Initial nodes will appear.</p>
-                            <p style={{fontSize: '14px', color: '#333', margin: '0 0 10px'}}>
-                            <strong>Step 4 - </strong>  Click repeatedly on <b>"Next Step" </b>to watch the tree build step by step:
-                            <ul style={{ fontSize: '14px' , marginTop: '4px', paddingLeft: '40px', color: '#555'}}>
-                              <li><strong>Select - </strong> The 2 lowest frequency nodes will be highlighted in orange.</li>
-                              <li><strong>Merge - </strong>Both nodes merge to create a new parent node.</li>
-                            </ul>
-                            </p>
-                            <p style={{fontSize: '14px', color: '#333', margin: '0 0 10px'}}>
-                            <strong>Step 5 - </strong>Once all the steps are complete, the final binary codes will be displayed.</p>
-                            <p style={{fontSize: '14px', color: '#333', margin: '0 0 10px'}}>
-                            <strong>Step 6 - </strong>Click the <b>"Reset"</b> button to clear everything and start over.</p>
-                          
-                          <div style={{
-                            marginTop: '16px',
-                            padding: '10px 14px',
-                            background: '#f0f4ff',
-                            borderRadius: '8px',
-                            borderLeft: '3px solid #1d2a6d',
-                            fontSize: '13px',
-                            color: '#555'
-                          }}>
-                          <strong>Tip:</strong> Characters with higher frequency get shorter binary codes!
-                          </div>
-                        <button onClick={() => setShowInstructions(false)}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            margin: '15px auto 0',
-                            top:'12px',
-                            right: '16px',
-                            background: 'white',
-                            color: '#1d2a6d',
-                            border: '2px solid #1d2a6d',
-                            borderRadius: '6px',
-                            padding: '4px 10px',
-                            cursor: 'pointer',
-                            fontSize: '16px', 
-                        }}>
-                         <b>CLOSE</b>  
-                        </button>
-                        </Box>
-                      </Box>
-                      </Box>
-                    )}
-                    {openHuffmanModal && <HuffmanAnimation />}
-                    {/* {HuffmanAnimation()} */}
-                  </DialogContent>
-                </Dialog>
+                
+                    <HuffmanConceptTutor
+                    open={openHuffmanModal}
+                    onClose={handleClose3Modal}/>
               </div>
             </div>
           </TabPanel>

@@ -479,6 +479,41 @@ html, body{
 @keyfranes tutorBlink {
     0%, 100% { opacity: 1; }
 }
+.guided-tutor-btn {
+    background: yellow;               
+    color: #1d2a6d;
+    font-weight: 600;     
+    padding: 8px 18px;            
+    border-radius: 10px;
+    text-transform: none;
+    cursor: pointer;
+    box-shadow: 0 6px 15px rgba(29, 42, 109, 0.3);
+    transition: 0.3s ease;
+    white-space: nowrap;
+    font-size: 14px;
+    width: 145px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.guided-tutor-btn:hover {
+    background: #ffe44d;
+    transition: translateY(-2px);
+}
+
+@keyframes slideIn {
+    from{
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* TREE */
 #binary_tree{
     border: 1px solid black;

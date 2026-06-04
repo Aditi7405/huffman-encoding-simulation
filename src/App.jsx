@@ -11,7 +11,7 @@ import {
 
 import ErrorPage from "./components/ErrorPage";
 
-import HuffmanPage from "./components/huffman/HuffmanPage";
+import HuffmanPage from "./components/HuffmanPage";
 
 function App() {
   const router = createBrowserRouter([
