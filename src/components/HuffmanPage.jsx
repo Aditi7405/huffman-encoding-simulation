@@ -11,9 +11,9 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Popper
 } from "@mui/material";
 import Tab from "@mui/material/Tab";
+import {Popper, Paper} from '@mui/material';
 
 import Button from "./styledbutton";
 import Select from "./styledselect";
@@ -34,7 +34,6 @@ import "react-toastify/dist/ReactToastify.css";
 import HuffmanAnimation from "./HuffmanAnimation";
 
 import { OpenCvProvider } from "opencv-react";
-import { createPortal } from "react-dom";
 import zIndex from "@mui/material/styles/zIndex";
 import HuffmanConceptTutor from './HuffmanConceptTutor';
 
@@ -114,11 +113,12 @@ function TutorBubble({text, targetRef, visible}) {
           position: "absolute",
           top: "-10px",
           left: "22px",
-          width: 0,
-          height: 0,
-          borderLeft: "10px solid transparent",
-          borderRight: "10px solid transparent",
-          borderBottom: "10px solid #1d2a6d",
+          width: '16px',
+          height: '16px',
+          transform: 'rotate(45deg)',
+          borderTop: '2px solid #1d2a6d',
+          borderLeft: '2px solid #1d2a6d',
+          zIndex: 1,
         }}
       /> 
       <div
@@ -238,6 +238,8 @@ export default function HuffmanPage() {
   const [anchorEl, setAnchorEl] = useState(null);
   const [showActionRequired, setShowActionRequired] = useState(false);
   const [showConceptWelcome, setShowConceptWelcome] = useState(false);
+  const [tourPlacement, setTourPlacement] = useState("bottom-end");
+  const [actionRequiredShown, setActionRequiredShown] = useState(false);
  
    
   function calculateEntropyMap(srcGray) {
@@ -467,26 +469,6 @@ export default function HuffmanPage() {
     isTourPlayingRef.current = isTourPlaying;
   }, [isTourPlaying]);
   
-  useEffect(() => {
-    clearTimeout(highlightTimeoutRef.current);
-
-    if (!isTourPlayingRef.current) return; 
-
-    if (tourStep === -1) return;
-
-    const text = tourSteps[tourStep]?.text || "";
-    const word = text.split(" ");
-   
-    if(tourWordIndex >= word.length) return;
-
-    highlightTimeoutRef.current = setTimeout(() => {
-
-      if(!isTourPlayingRef.current) return;
-      setTourWordIndex(prev => prev + 1);
-    }, 500);
-    return () => {clearTimeout(highlightTimeoutRef.current);
-    };
-  }, [tourWordIndex, tourStep, isTourPlaying]);
 
   useEffect (() => {
     setTourWordIndex(0);
@@ -564,6 +546,9 @@ export default function HuffmanPage() {
   const conceptButtonRef = useRef(null);
   const highlightTimeoutRef = useRef(null);
   const isTourPlayingRef = useRef(false);
+  const wordTimersRef = useRef([]);
+  const speechAnchorRef = useRef(null);
+  const tourWordIndexRef = useRef(-1);
 
 const startGuidedTutor = () => {
   setShowTutorPrompt(false);
@@ -577,26 +562,24 @@ const startGuidedTutor = () => {
 const handleTutorToggle = () => {
   if (isTourPlaying) {
     pausedWordIndexRef.current = tourWordIndex;
-
     clearTimeout(highlightTimeoutRef.current);
-
     isTourPlayingRef.current = false;
-
     window.speechSynthesis.cancel();
-    
     setIsTourPlaying(false);
     return;
-  } if (tourStep === -1) {
+  }
+  
+  if (tourStep === -1) {
+    isTourCancelledRef.current = false;
+    isTourPlayingRef.current = true;
     startTour();
     return;
   }
+
   setTourWordIndex(0);
   pausedWordIndexRef.current = 0;
-
   isTourPlayingRef.current = true;
-
   setIsTourPlaying(true);
-
   const step = tourSteps[tourStep];
   if(step) {
     speakTourText(step.text);
@@ -679,86 +662,84 @@ const speakStep = () => {
     ],
   };
   
-  const tourPosMap = {
-    guidedTutor: {top: 60, right: 390},
-    instruction: {top:60, right: 550},
-    speech: {top: 60, right: 650},
-    toolbox: {top: 620, right: 1200},
-    chooseImage: {top: 180, right: 900},
-    upload: {top: 400, left: 320},
-    inputImage: {top: 550, right: 700},
-    quantization: {top:620, right: 1200},
-    process: {top: 630, right: 750},
-    output: {top: 550, right: 400},
-    print: {top:630, right: 550},
-    concept: {top:630, right: 270}
-  };
-
   const tourSteps = [
   {
     title: "Guided Tutor",
     text: "Welcome to the Lossy Huffman Encoding experiment! I will guide you through the experiment interface and workflow.",
     refKey: "guidedTutor",
+    placement: "bottom-end",
   },
   {
     title: "Instruction Button",
     text: "This is the Instructions button. Click here at any time to view the detailed procedure for performing experiment.",
     refKey: "instruction",
+    placement: "bottom-end",
   },
   {
     title: "Speech box",
     text: "This is the button from where you can play/pause your guided tutor.",
     refKey: "speech",
+    placement: "bottom-start",
   },
   {
     title:"Tool Panel",
     text: "This is the Lossy Huffman Tools panel. It contains all the utilities you need to perform the experiment.",
     refKey: "toolbox",
+    placement: "bottom-start",
   },
   {
     title: "Image Box",
     text: "In this section, you can select a sample image for processing. Click on any image to choose it as the input.",
     refKey: "chooseImage",
+    placement: "right-start",
   },
   {
     title:"Upload Button",
     text: "You can also upload your own image by clicking the Upload File button.",
     refKey: "upload",
+    placement: "right-start",
   },
   {
     title: "Input Image Box",
     text: "This is the Input Image section, where the selected or uploaded image will be displayed before processing.",
     refKey: "inputImage",
+    placement: "bottom-start",
   },
   {
     title: "Quantization Value",
     text: "Enter a valid Quantization Factor value here. It controls the level of compression.",
     refKey: "quantization",
     requiresInput: true,
+    placement: "bottom-start",
   },
   {
     title: "Process Button",
     text: "Once you have selected an image and entered the quantization factor, click the Process button to generate the output.",
     refKey: "process",
+    placement: "bottom-start",
   },
   {
     title: "Output Box",
     text: "The processed output image, entropy maps and compression ratio will appear in this section.",
     refKey: "output",
+    placement: "bottom-start",
   },
   {
     title: "Print Button",
     text: "Click the Print button to print or save the generated result.",
     refKey: "print",
+    placement: "bottom-start",
   },
   {
     title:"Concept Button",
     text: "Click the Concept button to understand how Huffman Encoding works through a step by step animation.",
     refKey: "concept",
+    placement: "bottom-end",
   },
   {
     text: "This completes the guided walkthrough. You are all set to start the experiment. Good luck!",
     refKey: "concept",
+    placement: "bottom-end",
   },
 ];
 
@@ -766,7 +747,7 @@ const getRefByKey = (key) => {
   const map = {
     guidedTutor: guidedTutorBtnRef,
     instruction: instructionButtonRef,
-    speech: speechButtonRef,
+    speech: speechAnchorRef,
     toolbox: toolboxRef,
     chooseImage: chooseImageRef,
     upload: uploadButtonRef,
@@ -784,48 +765,16 @@ const updateTourPos = (refKey) => {
   const ref = getRefByKey(refKey);
   if (!ref?.current) return;
 
-  const pos = tourPosMap[refKey];
-  if (pos) {
-    setTourMsgPos(pos);
-  }
-
-  ref.current.scrollIntoView({behavior: "smooth", block: "center"});
+  ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
+  setAnchorEl(ref.current);
 };
-
- {/*} const rect = ref.current.getBoundingClientRect();
-  const vpW = window.innerWidth;
-  const vpH = window.innerHeight;
-  const popupW = 320;
-  const popupH = 200;
-  const gap = 12;
-
-  let top, right, left;
-
-  if (refKey === "chooseImage"){
-    setTourMsgPos({top: 180, right: 900});
-    ref.current.scrollIntoView({behavior: "smooth", block: "center"});
-    return;
-  }
-
-  if (vpH - rect.bottom >= popupH + gap) {
-    top = rect.bottom + gap;
-  } else {
-    top = rect.top - popupH - gap;
-  }
-
-  right = vpW - rect.right;
-  left = rect.left;
-
-  top   = Math.max(8, Math.min(top, vpH - popupH - 8));
-  right = Math.max(8, Math.min(right, vpW - popupW - 8));
-  left = Math.max(8, Math.min(left, vpW - popupW - 8));
-
-  setTourMsgPos({ top, right, left});
-  ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-};   */}
-
+  
 const speakTourText = (text, onDone) => {
   window.speechSynthesis.cancel();
+
+  wordTimersRef.current.forEach(t => clearTimeout(t));
+  wordTimersRef.current = [];
+
   setTimeout(() => {
     const utterance = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
@@ -833,8 +782,31 @@ const speakTourText = (text, onDone) => {
     utterance.rate = 0.95;
     utterance.pitch = 1;
     utterance.volume = 1;
-    utterance.onend = () => { if (onDone) onDone(); };
-    utterance.onerror = () => { if (onDone) onDone(); };
+
+    const words = text.split(' ');
+    const msPerWord = 420;
+
+    setTourWordIndex(0);
+    words.forEach((_, i) => {
+      const timer = setTimeout(() => {
+        setTourWordIndex(i);
+      }, i * msPerWord);
+      wordTimersRef.current.push(timer);
+    });
+
+    utterance.onend = () => {
+      wordTimersRef.current.forEach(t => clearTimeout(t));
+      wordTimersRef.current = [];
+      setTourWordIndex(-1);
+      if (onDone) onDone();
+    };
+
+    utterance.onerror = () => {
+      wordTimersRef.current.forEach(t => clearTimeout(t));
+      wordTimersRef.current = [];
+      if (onDone) onDone();
+    };
+
     window.speechSynthesis.speak(utterance);
   }, 300);
 };
@@ -842,50 +814,54 @@ const speakTourText = (text, onDone) => {
 const goToStep = (index) => {
   setShowActionRequired(false);
   if (index < 0 || index >= tourSteps.length) {
-
+    
     setTourStep(-1);
+    
     setIsTourPlaying(false);
     setTourWordIndex(0);
     setHighlightedRefKey(null);
     setAnchorEl(null);
+    window.speechSynthesis.cancel();
+    wordTimersRef.current.forEach(t => clearTimeout(t));
+    wordTimersRef.current = [];
     return;
   }
 
   setIsTourPlaying(true);
-
   const step = tourSteps[index];
   const ref = getRefByKey(step.refKey);
   setAnchorEl(ref?.current ?? null);
-
   setHighlightedRefKey(step.refKey);
+  setTourPlacement(step.placement || "bottom-start"); 
   window.speechSynthesis.cancel();
   setTourStep(index);
   setTourWordIndex(0);
   updateTourPos(step.refKey);
   speakTourText(step.text);
+  
 };
 
 const handleNextTourStep = () => {
-  console.log("tourStep:", tourStep);
-  console.log("refKey:", tourSteps[tourStep]?.refKey);
-  console.log("qfactor:", qfactor);
-  console.log("showActionRequired:", showActionRequired);
+
   if (
     tourSteps[tourStep]?.refKey === "quantization" &&
     (!qfactor || qfactor <= 0)
   ) {
     setShowActionRequired(true);
+    speakTourText("Please enter a valid Quantization Factor before proceeding.");
     return;
   }
-
-  setShowActionRequired(false);
-
-  if (tourSteps[tourStep]?.refKey === "quantization") {
+  if (tourSteps[tourStep]?.refKey === "quantization" && qfactor > 0) {
+    setShowActionRequired(false);
     const processStep = tourSteps.findIndex(s => s.refKey === "process");
-    if (processStep !== -1){
+    if (processStep !== -1) {
       goToStep(processStep);
-      return;
     }
+    return;
+  }
+  if (tourStep === tourSteps.length - 1) {
+    stopTour();
+    return;
   }
   goToStep(tourStep + 1);
 };
@@ -904,6 +880,9 @@ const stopTour = () => {
   setTourStep(-1);
   setIsTourPlaying(false);
   setTourWordIndex(0);
+  setAnchorEl(null);
+  wordTimersRef.current.forEach(t => clearTimeout(t));
+  wordTimersRef.current = [];
 };
 
 const goBackStep = () => {
@@ -982,16 +961,69 @@ const handleProcessClick = () => {
   }
   lossyHuffmanEncode();
   setTimeout(() => {
-    const outputStep = tourSteps.findIndex(s => s.refKey === "output");
-    if (outputStep !== -1){
-      setIsTutorEnabled(true);
+   const outputStep = tourSteps.findIndex(s => s.refKey === "output");
+  if (outputStep !== -1 && tourStep >= 0) {
       setIsTourPlaying(true);
       isTourPlayingRef.current = true;
       isTutorCancelledRef.current = false;
       goToStep(outputStep);
-    }
+  }
   }, 1500);
 }
+
+const getArrowStyle = (placement) => {
+  const dir = placement?.split('-')[0]; 
+  
+  const base = {
+    width: '16px',
+    height: '16px',
+    background: '#dbeafe',
+    transform: 'rotate(45deg)',
+    zIndex: 0,
+    flexShrink: 0,
+  };
+
+  if (dir === 'bottom') {
+    // popup neeche hai → arrow upar hoga
+    return {
+      ...base,
+      marginLeft: '20px',
+      marginBottom: '-8px',
+      borderTop: '2px solid #1d2a6d',
+      borderLeft: '2px solid #1d2a6d',
+      order: -1, // arrow pehle
+    };
+  } else if (dir === 'top') {
+    // popup upar hai → arrow neeche hoga
+    return {
+      ...base,
+      marginLeft: '20px',
+      marginTop: '-8px',
+      borderBottom: '2px solid #1d2a6d',
+      borderRight: '2px solid #1d2a6d',
+      order: 1, // arrow baad mein
+    };
+  } else if (dir === 'right') {
+    return {
+      ...base,
+      marginTop: '20px',
+      marginLeft: '-8px',
+      borderBottom: '2px solid #1d2a6d',
+      borderLeft: '2px solid #1d2a6d',
+      order: -1,
+    };
+  } else if (dir === 'left') {
+    return {
+      ...base,
+      marginTop: '20px',
+      marginRight: '-8px',
+      borderTop: '2px solid #1d2a6d',
+      borderRight: '2px solid #1d2a6d',
+      order: 1,
+    };
+  }
+  return base;
+};
 
   return (
     <OpenCvProvider>
@@ -1007,13 +1039,13 @@ const handleProcessClick = () => {
 
           <h2 className="header-heading">Huffman Encoding</h2>
           <div id="header_button" 
-          ref={speechButtonRef}
           style={{display: "flex", 
               alignItems:"center",
               gap: "12px",
               marginLeft:"auto", 
               position:"relative"}}>
               <div
+              ref={speechAnchorRef}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -1087,229 +1119,14 @@ const handleProcessClick = () => {
               if (isTourPlaying || tourStep >= 0) {
                 stopTour();
               } else {
+                isTourCancelledRef.current = false;
+                isTourPlayingRef.current = true;
                 startTour();
               }
             }}>
                 Guided Tutor
             </button>
            </div>
-
-           {showTutorPrompt && (
-            <div 
-            style={{
-              position: "absolute",
-              top: "calc(100% + 12px)",
-              right: "0",
-              width: "350px",
-              background: "#fff",
-              borderRadius: "12px",
-              padding: "12px",
-              boxShadow: "0 8px 20px rgba(0,0,0,0.15)",
-              zIndex: 9999,
-            }}>
-            <div style={{
-              position: "absolute",
-              top: "-10px",
-              right: "24px",
-              width: 0,
-              height: 0,
-              borderLeft: "10px solid ",
-              borderRight: "10px solid ",
-              borderBottom: "10px solid white",
-            }}/>
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              marginBottom: "12px"
-            }}>
-            
-            <div>
-            <h2 style={{ margin: 0, color: "#1d2a6d" ,marginBottom: "10px", fontSize: "14px", fontWeight: "700"}}>
-            Guided Tutor is here to help!
-            </h2>
-            <p style={{
-              fontSize: "14px",
-              color: "#444",
-              marginBottom: "18px",
-              lineHeight: "1.5",
-            }}>
-              Welcome, Do you want Guided Tutor will give you proper guide how to run the simulaton?
-            </p>
-            <div
-              style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: "10px",
-            }}>
-
-            <button onClick={() => {
-              setShowTutorPrompt(false);
-              
-            }}
-            style={{
-            background: "#f3f4f6",
-            color: "#1d2a6d",
-            border: "1px solid #1d2a6d",
-            padding: "8px 20px",
-            borderRadius: "8px",
-            cursor: "pointer",
-            fontWeight: "600",
-            fontSize: "14px",
-            }}>
-              No, Thanks
-            </button>
-
-            <button onClick={() => {
-              setIsTutorEnabled(true);
-              setShowTutorPrompt(false);
-              setTimeout(() => {
-                isTourCancelledRef.current = false;
-                isTourPlayingRef.current = true;
-                startTour();
-              }, 150);              
-            }}
-            style={{
-              background: "#1d2a6d",
-              color: "white",
-              border: "none",
-              padding: "8px 20px",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "14px",
-            }}>
-              Yes, Please
-            </button>
-          </div>
-        </div>
-      </div>
-      </div>
-      )}
-
-      {tourStep >= 0 && createPortal(
-          <div style={{
-              position: "fixed",
-              right: `${tourMsgPos.right}px`,
-              top: `${tourMsgPos.top}px`,
-              width: "320px",
-              background: "linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))",
-              borderRadius: "18px",
-              padding: "16px",
-              boxShadow: "0 8px 25px rgba(0,0,0,0.15)",
-              zIndex: 9999,
-            }}>   
-            <div style={{
-              textAlign: "center",
-              fontSize: "16px",
-              fontWeight: "700",
-              color: "#1d2a6d",
-              marginBottom: "12px",
-              borderBottom: "1px solid #cbd5e1",
-              paddingBottom: "8px",
-            }}>
-            {showActionRequired
-            ? "⚠️ Action Required"
-            : tourSteps[tourStep]?.title}
-            </div>
-            
-            <div style={{
-              fontSize: "14px",
-              color: "#333",
-              lineHeight: "1.6",
-              fontWeight: "500",
-              marginBottom: "18px",
-            }}>
-          {showActionRequired ? (
-            <>
-            Please enter a valid Quantization Factor before proceeding.
-            </>
-          ) : (
-            tourSteps[tourStep]?.text.split(" ").map((word, i) => (
-      <span
-        key={i}
-        style={{
-          padding: "1px 3px",
-          marginRight: "3px",
-          borderRadius: "4px",
-          display: "inline-block",
-          background:
-            i === tourWordIndex ? "#fff8e1" : "transparent",
-          color:
-            i === tourWordIndex ? "#92400e" : "#1d2a6d",
-          fontWeight:
-            i === tourWordIndex ? "600" : "400",
-        }}
-      >
-        {word}
-      </span>
-    ))
-    )}
-  </div>
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              flexWrap: "wrap",
-              gap: "10px",
-              marginTop: "12px"
-            }}>
-            <div style={{display: "flex", gap: "10px"}}>
-            <button onClick={stopTour}
-            style={{
-              background: "transparent",
-              border: "1px solid #1d2a6d",
-              borderRadius: "10px",
-              padding: "8px 18px",
-              color: "#64748b",
-              fontWeight: "600",
-              cursor: "pointer",
-              fontSize: "14px",
-            }}>
-              EXIT
-            </button>
-            <button 
-            onClick={() => {
-              setShowActionRequired(false);
-              goToStep(tourStep - 1);
-            }}
-            disabled={tourStep === 0}
-            style={{
-              background: "#d1d5db",
-              color: "#1d2a6d",
-              border: "1px solid #1d2a6d",
-              padding: "8px 18px",
-              borderRadius: "10px",
-              cursor: tourStep === 0 ? "not-allowed" : "pointer",
-              fontWeight: "600",
-              fontSize: "14px"
-            }}>
-              Back
-            </button>
-            </div>
-            <button
-            onClick={handleNextTourStep}
-            disabled={showActionRequired && (!qfactor || qfactor <= 0)}
-            style={{
-              background: (showActionRequired && (!qfactor || qfactor <= 0))
-              ? "#9ca3af"
-              : "#1d2a6d",
-              color: "white",
-              border: "none",
-              padding: "8px 18px",
-              borderRadius: "10px",
-              cursor: (showActionRequired && (!qfactor || qfactor <= 0))
-              ? "not-allowed"
-              : "pointer",
-              fontWeight: "600",
-              transition: "all 0.3s ease",
-            }}>
-             {tourStep === tourSteps.length - 1 ? "Finish" : "Next"}
-            </button> 
-          </div>
-          </div>,
-            document.body
-          )}
 
           <Dialog
            open={openInstructionsModal}
@@ -1332,14 +1149,6 @@ const handleProcessClick = () => {
 
   {/* ── Content ── */}
   <DialogContent sx={{ padding: '20px 24px 8px' }}>
-
-    {/* Blue bold title - tab ke hisaab se */}
-    {/*<p style={{ fontWeight: 700, fontSize: '15px', color: '#1D2A6D', margin: '0 0 14px' }}>
-      {tabValue === 0 ? 'Run Length Encoding'
-        : tabValue === 1 ? 'Lossy Huffman'
-        : tabValue === 2 ? 'Sine and Cosine'
-        : 'JPEG Compression'}:
-    </p>
 
     {/* Numbered Steps + Note */}
     {(() => {
@@ -1436,6 +1245,310 @@ const handleProcessClick = () => {
 
 </Dialog>
 </div>
+
+ {showTutorPrompt && (
+  <Popper
+    open={showTutorPrompt}
+    anchorEl={guidedTutorBtnRef.current}
+    placement="bottom-end"
+    modifiers={[
+      { name: 'flip', enabled: true },
+      { name: 'preventOverflow', options: { boundary: 'window', padding: 8 } },
+      { name: 'offset', options: { offset: [0, 12] } },
+    ]}
+    style={{ zIndex: 9999 }}
+  >
+  <div style={{ display: 'flex', flexDirection: 'column', }}>
+    <div style={{
+      width: '16px',
+      height: '16px',
+      background: 'white',
+      transform: 'rotate(45deg)',
+      borderTop: '1px solid #e0e0e0',
+      borderLeft: '1px solid #e0e0e0',
+      marginLeft: 'auto',
+      marginRight: '20px',
+      marginBottom: '-8px',
+      zIndex: 0,
+      flexShrink: 0,
+    }}/>
+    <Paper elevation={6} sx={{
+      width: '350px',
+      borderRadius: '12px',
+      padding: '12px',
+      background: '#fff',
+      position: 'relative',
+      zIndex: 1,
+    }}>
+      {/* Arrow */}
+      <div style={{
+        position: 'absolute',
+        top: '-10px',
+        right: '24px',
+        width: '16px',
+        height: '16px',
+        background: '#dbeafe',
+        transform: 'rotate(45deg)',
+        borderTop: '2px solid #1d2a6d',
+        borderRight: '2px solid #1d2a6d',
+        zIndex: 1,
+      }}/>
+
+      <h2 style={{
+        margin: '0 0 10px',
+        color: '#1d2a6d',
+        fontSize: '14px',
+        fontWeight: '700'
+      }}>
+        Guided Tutor is here to help!
+      </h2>
+
+      <p style={{
+        fontSize: '14px',
+        color: '#444',
+        marginBottom: '18px',
+        lineHeight: '1.5',
+      }}>
+        Welcome, Do you want Guided Tutor to give you proper guide how to run the simulation?
+      </p>
+
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: '10px',
+      }}>
+        <button onClick={() => setShowTutorPrompt(false)}
+          style={{
+            background: '#f3f4f6',
+            color: '#1d2a6d',
+            border: '1px solid #1d2a6d',
+            padding: '8px 20px',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+          }}>
+          No, Thanks
+        </button>
+
+        <button onClick={() => {
+          setIsTutorEnabled(true);
+          setShowTutorPrompt(false);
+          setTimeout(() => {
+            isTourCancelledRef.current = false;
+            isTourPlayingRef.current = true;
+            startTour();
+          }, 150);
+        }}
+          style={{
+            background: '#1d2a6d',
+            color: 'white',
+            border: 'none',
+            padding: '8px 20px',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+          }}>
+          Yes, Please
+        </button>
+      </div>
+    </Paper>
+    </div>
+  </Popper>
+)}
+
+  {tourStep >= 0 && (
+  <Popper
+    open={tourStep >= 0}
+    anchorEl={anchorEl}
+    placement={tourPlacement}
+    modifiers={[
+      { name: 'flip', enabled: true,
+        options: { fallbackPlacements: ['top-start', 'bottom-end', 'top-end'] }
+      },
+      { name: 'preventOverflow', options: { boundary: 'window', padding: 8 } },
+      { name: 'offset', options: { offset: [0, 12] } },
+    ]}
+    style={{ zIndex: 9999 }}>
+
+    <div style={{
+    display: 'flex',
+    flexDirection: tourPlacement?.startsWith('left') || tourPlacement?.startsWith('right') 
+      ? 'row' 
+      : 'column',
+    alignItems: tourPlacement?.startsWith('left') || tourPlacement?.startsWith('right')
+      ? 'flex-start' 
+      : 'flex-start',
+    }}>
+
+    <Paper elevation={6} sx={{
+      width: '320px',
+      background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
+      borderRadius: '18px',
+      padding: '16px',
+      boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+      position: 'relative',
+      zIndex: 1,
+    }}>
+    {/* ✅ YAHAN REPLACE KARO — dynamic */}
+<div style={{
+  position: 'absolute',
+  
+  // Vertical position
+  ...(tourPlacement?.startsWith('bottom') && { top: '-9px' }),
+  ...(tourPlacement?.startsWith('top')    && { bottom: '-9px' }),
+  ...(tourPlacement?.startsWith('right')  && { top: '20px', left: '-9px' }),
+  ...(tourPlacement?.startsWith('left')   && { top: '20px', right: '-9px' }),
+  
+  ...(( tourPlacement?.startsWith('bottom') || tourPlacement?.startsWith('top')) && 
+      tourPlacement?.endsWith('end')   && { right: '20px' }),
+  ...(( tourPlacement?.startsWith('bottom') || tourPlacement?.startsWith('top')) && 
+      tourPlacement?.endsWith('start') && { left: '20px' }),
+
+  width: '16px',
+  height: '16px',
+  background: 'rgb(219,234,254)',
+  transform: 'rotate(45deg)',
+
+  ...(tourPlacement?.startsWith('bottom') && { borderTop: '2px solid #1d2a6d',    borderLeft: '2px solid #1d2a6d' }),
+  ...(tourPlacement?.startsWith('top')    && { borderBottom: '2px solid #1d2a6d', borderRight: '2px solid #1d2a6d' }),
+  ...(tourPlacement?.startsWith('right')  && { borderLeft: '2px solid #1d2a6d',   borderBottom: '2px solid #1d2a6d' }),
+  ...(tourPlacement?.startsWith('left')   && { borderRight: '2px solid #1d2a6d',  borderTop: '2px solid #1d2a6d' }),
+
+  zIndex: 2,
+}}/>
+      {/* Title */}
+      <div style={{
+        textAlign: "center",
+        fontSize: "16px",
+        fontWeight: "700",
+        color: "#1d2a6d",
+        marginBottom: "12px",
+        borderBottom: "1px solid #cbd5e1",
+        paddingBottom: "8px",
+      }}>
+        {showActionRequired ? "⚠️ Action Required" : tourSteps[tourStep]?.title}
+      </div>
+
+      {/* Text */}
+      <div style={{
+        fontSize: "14px",
+        color: "#333",
+        lineHeight: "1.6",
+        fontWeight: "500",
+        marginBottom: "18px",
+      }}>
+        {showActionRequired ? (
+         "Action Required. Please enter a valid Quantization Factor before proceeding."
+    .split(" ").map((word, i) => (
+      <span key={i} style={{
+        padding: "1px 3px",
+        marginRight: "3px",
+        borderRadius: "4px",
+        display: "inline-block",
+        background: i === tourWordIndex ? "#fff8e1" : "transparent",
+        color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
+        fontWeight: i === tourWordIndex ? "600" : "400",
+      }}>
+        {word}
+      </span>
+    )) 
+        ) : (
+          tourSteps[tourStep]?.text.split(" ").map((word, i) => (
+            <span key={i} style={{
+              padding: "1px 3px",
+              marginRight: "3px",
+              borderRadius: "4px",
+              display: "inline-block",
+              background: i === tourWordIndex ? "#fff8e1" : "transparent",
+              color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
+              fontWeight: i === tourWordIndex ? "600" : "400",
+            }}>
+              {word}
+            </span>
+          ))
+        )}
+      </div>
+
+      {/* Buttons */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        flexWrap: "wrap",
+        gap: "10px",
+        marginTop: "12px"
+      }}>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button onClick={stopTour} style={{
+            background: "transparent",
+            border: "1px solid #1d2a6d",
+            borderRadius: "10px",
+            padding: "8px 18px",
+            color: "#64748b",
+            fontWeight: "600",
+            cursor: "pointer",
+            fontSize: "14px",
+          }}>EXIT</button>
+
+          <button
+            onClick={() => { setShowActionRequired(false); goToStep(tourStep - 1); }}
+            disabled={tourStep === 0}
+            style={{
+              background: "#d1d5db",
+              color: "#1d2a6d",
+              border: "1px solid #1d2a6d",
+              padding: "8px 18px",
+              borderRadius: "10px",
+              cursor: tourStep === 0 ? "not-allowed" : "pointer",
+              fontWeight: "600",
+              fontSize: "14px"
+            }}>Back</button>
+        </div>
+
+        <button
+          onClick={handleNextTourStep}
+          disabled={false}
+          style={{
+            background: (showActionRequired && (!qfactor || qfactor <= 0))
+              ? "#9ca3af" : "#1d2a6d",
+            color: "white",
+            border: "none",
+            padding: "8px 18px",
+            borderRadius: "10px",
+            cursor: (showActionRequired && (!qfactor || qfactor <= 0))
+              ? "not-allowed" : "pointer",
+            fontWeight: "600",
+            fontSize: "14px",
+            transition: "all 0.3s ease",
+          }}>
+          {tourStep === tourSteps.length - 1 ? "Finish" : "Next"}
+        </button>
+      </div>
+
+      {/* Progress */}
+      <div style={{ marginTop: '12px' }}>
+        <div style={{ background: '#eee', borderRadius: '4px', height: '6px' }}>
+          <div style={{
+            width: `${((tourStep + 1) / tourSteps.length) * 100}%`,
+            background: '#1d2a6d',
+            height: '6px',
+            borderRadius: '4px',
+            transition: '0.3s'
+          }}/>
+        </div>
+        <span style={{
+          fontSize: '11px', color: '#888',
+          marginTop: '4px', display: 'block', textAlign: 'right'
+        }}>
+          {tourStep + 1} / {tourSteps.length}
+        </span>
+      </div>
+    </Paper>
+    </div>
+  </Popper>
+)}
 
   <div id="mainbox">
     <TabPanel tabValue={tabValue} index={1}>
@@ -1638,9 +1751,6 @@ const handleProcessClick = () => {
                           onChange={(e) => {
                           const value = Number(e.target.value);
                           setQfactor(value);
-                          if (value > 0) {
-                            setShowActionRequired(false);
-                          }
                           }}
                           placeholder="Enter std threshold"
                           style={{
@@ -1698,7 +1808,7 @@ const handleProcessClick = () => {
                         "&:hover": {
                           transform: "translateY(-4px)",
                         },
-                        ...getHighlightStyle("inputbox"),
+                        ...getHighlightStyle("inputImage"),
                       }}
                       
                     >
@@ -1909,7 +2019,18 @@ const handleProcessClick = () => {
                 
                     <HuffmanConceptTutor
                     open={openHuffmanModal}
-                    onClose={handleClose3Modal}/>
+                    onClose={handleClose3Modal}
+                    onOpen={() => {
+                     setShowTutorPrompt(false);
+                     setTourStep(-1);
+                     setIsTourPlaying(false);
+                     setHighlightedRefKey(null);
+                     setAnchorEl(null);
+                     window.speechSynthesis.cancel();
+                     wordTimersRef.current.forEach(t => clearTimeout(t));
+                     wordTimersRef.current = []; 
+                    }}
+                    />
               </div>
             </div>
           </TabPanel>
