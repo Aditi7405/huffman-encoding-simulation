@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef} from 'react';
-import { Dialog, DialogTitle, DialogContent, Popper} from '@mui/material';
-import { Portal } from '@mui/material';
+import { useState, useEffect, useRef } from 'react';
+import { Dialog, DialogTitle, DialogContent, Popper } from '@mui/material';
 import Box from '@mui/material/Box';
 import HuffmanAnimation from './HuffmanAnimation';
 import Button from './styledbutton';
@@ -21,6 +20,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   const symbolNames = ['Plus (+)', 'Minus (-)', 'Multiply (×)', 'Divide (÷)'];
   const [isPopupVisible, setIsPopupVisible] = useState(true);
   const [showSymbolAlert, setShowSymbolAlert] = useState(false);
+  const [tourWordIndex, setTourWordIndex] = useState(-1);
 
   const guidedTutorRef = useRef(null);
   const instructionBtnRef = useRef(null);
@@ -35,6 +35,17 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   const waitingForSymbolRef = useRef(false);
   const freqTableRef = useRef(null);
   const resetAnimationRef = useRef(null);
+  const wordTimersRef = useRef([]);
+  const conceptStepRef = useRef(0);
+  const waitingForAnalyzeRef = useRef(false);
+  const symbolBoxRef = useRef(null);
+  const textInputBoxRef = useRef(null);
+  const currentPlacementRef = useRef('bottom-start');
+
+  const setConceptStepSynced = (val) => {
+    conceptStepRef.current = val;
+    setConceptStep(val);
+  };
 
   const conceptTourSteps = [
     {
@@ -86,7 +97,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
       title: "Tree Visualization Box",
       text: "Watch the Huffman Tree build here step by step. Each node shows character and its frequency.",
       ref: treeVisualizationRef,
-      placement: "bottom"
+      placement: "bottom",
     },
     {
       title: "Prev Step",
@@ -103,9 +114,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   ];
 
   useEffect(() => {
-    if (open && onOpen) {
-      onOpen();
-    }
+    if (open && onOpen) onOpen();
   }, [open]);
 
   useEffect(() => {
@@ -113,17 +122,10 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
     if (!dialogEl) return;
     const scrollEl = dialogEl.closest('.MuiDialog-scrollPaper') || dialogEl.parentElement;
     if (!scrollEl) return;
-    if (isConceptTourRunning) {
-      scrollEl.style.overflow = 'hidden';
-    } else {
-      scrollEl.style.overflow = '';
-    }
-    return () => {
-      scrollEl.style.overflow = '';
-    };
+    scrollEl.style.overflow = isConceptTourRunning ? 'hidden' : '';
+    return () => { scrollEl.style.overflow = ''; };
   }, [isConceptTourRunning]);
 
-  // ✅ Tour step useEffect — sirf tour anchor set karta hai
   useEffect(() => {
     if (!isConceptTourRunning) return;
     const currentRef = conceptTourSteps[conceptStep]?.ref;
@@ -140,7 +142,6 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
     }
   }, [conceptStep, isConceptTourRunning]);
 
-  // ✅ Open useEffect — sirf welcome popup set karta hai
   useEffect(() => {
     let timer;
     if (open) {
@@ -159,73 +160,194 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
     return () => clearTimeout(timer);
   }, [open]);
 
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+      if (wordTimersRef.current) {
+        wordTimersRef.current.forEach(t => clearTimeout(t));
+        wordTimersRef.current = [];
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+  if (!isConceptTourRunning) {
+    conceptTourSteps.forEach(step => {
+      const el = step.ref?.current;
+      if (el) {
+        el.style.outline = '';
+        el.style.boxShadow = '';
+        el.style.borderRadius = '';
+      }
+    });
+    return;
+  }
+
+  conceptTourSteps.forEach(step => {
+    const el = step.ref?.current;
+    if (el) {
+      el.style.outline = '';
+      el.style.boxShadow = '';
+      el.style.borderRadius = '';
+    }
+  });
+
+  const el = conceptTourSteps[conceptStep]?.ref?.current;
+  if (el) {
+    el.style.outline = '3px solid #f59e0b';
+    el.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+    el.style.borderRadius = '8px';
+    el.style.transition = 'all 0.3s ease';
+  }
+}, [conceptStep, isConceptTourRunning]);
+
+useEffect(() => {
+  if(!isConceptTourRunning) return;
+  const pl = conceptTourSteps[conceptStep]?.placement || 'bottom-start';
+  currentPlacementRef.current = pl;
+}, [conceptStep, isConceptTourRunning]);
+
+  const speakTourText = (text, onDone) => {
+    window.speechSynthesis.cancel();
+    if (wordTimersRef.current) {
+      wordTimersRef.current.forEach(t => clearTimeout(t));
+      wordTimersRef.current = [];
+    }
+    setTourWordIndex(-1);
+
+    const doSpeak = (voices) => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      const preferred = voices.find(v => v.lang.startsWith('en')) || voices[0];
+      if (preferred) utterance.voice = preferred;
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+
+      const words = text.split(' ');
+
+      utterance.onboundary = (event) => {
+        if (event.name === 'word') {
+          let charCount = 0;
+          for (let i = 0; i < words.length; i++) {
+            if (charCount >= event.charIndex) {
+              setTourWordIndex(i);
+              break;
+            }
+            charCount += words[i].length + 1;
+          }
+        }
+      };
+
+      utterance.onend = () => {
+        setTourWordIndex(-1);
+        setIsHuffmanSpeaking(false);
+        if (onDone) onDone();
+      };
+
+      utterance.onerror = (e) => {
+        if (e.error === 'interrupted') return;
+        console.warn('Speech error:', e);
+        setTourWordIndex(-1);
+        setIsHuffmanSpeaking(false);
+        if (onDone) onDone();
+      };
+
+      window.speechSynthesis.speak(utterance);
+    };
+    setTimeout(() => {
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        doSpeak(voices);
+      } else {
+        window.speechSynthesis.onvoiceschanged = () => {
+          window.speechSynthesis.onvoiceschanged = null;
+          doSpeak(window.speechSynthesis.getVoices());
+        };
+      }
+    }, 150);
+  };
+
   const handleSymbolSelected = (index) => {
     if (!waitingForSymbolRef.current) return;
     if (resetAnimationRef.current) resetAnimationRef.current();
     setWaitingForSymbol(false);
     waitingForSymbolRef.current = false;
-    window.speechSynthesis.cancel();
-    const name = symbolNames[index];
-    const u = new SpeechSynthesisUtterance(`You selected ${name}.`);
-    u.rate = 0.95;
 
-    u.onend = () => {
-      const next = conceptStep + 1;
-      setConceptStep(next);
+  const symbolEl = symbolBoxRef.current;
+  if (symbolEl) {
+  symbolEl.style.outline = '3px solid #f59e0b';
+  symbolEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+  symbolEl.style.borderRadius = '8px';
+  }
+
+    const name = symbolNames[index];
+    speakTourText(`You selected ${name}.`, () => {
+      const next = conceptStepRef.current + 1;
+      setConceptStepSynced(next);
       setWaitingForAnalyze(true);
+      waitingForAnalyzeRef.current = true;
       setIsConceptTourRunning(true);
       setIsPopupVisible(true);
-      const u2 = new SpeechSynthesisUtterance(conceptTourSteps[next].text);
-      u2.rate = 0.95;
-      window.speechSynthesis.speak(u2);
-    };
-    window.speechSynthesis.speak(u);
+      const el = conceptTourSteps[next]?.ref?.current;
+      if (el) setAnchorEl(el);
+      speakTourText(conceptTourSteps[next].text);
+    });
   };
 
   const handleAnalyzeDone = () => {
-    if (!waitingForAnalyze) return;
-    setWaitingForAnalyze(false);
-    window.speechSynthesis.cancel();
-    const next = conceptStep + 1;
-    setConceptStep(next);
-    setIsPopupVisible(false);
-    setTimeout(() => {
-      const el = freqTableRef.current;
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => {
-          setAnchorEl(el);
-          setIsPopupVisible(true);
-        }, 400);
-      } else {
+  console.log("handleAnalyzeDone called, waitingForAnalyzeRef:", waitingForAnalyzeRef.current);
+  if (!waitingForAnalyzeRef.current) return;
+  waitingForAnalyzeRef.current = false;
+  setWaitingForAnalyze(false);
+  const next = conceptStepRef.current + 1;
+  setConceptStepSynced(next);
+  setIsPopupVisible(false);
+  setTimeout(() => {
+    const el = freqTableRef.current;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => {
+        setAnchorEl(el);
         setIsPopupVisible(true);
-      }
-      const u = new SpeechSynthesisUtterance(conceptTourSteps[next].text);
-      u.rate = 0.95;
-      window.speechSynthesis.speak(u);
-    }, 300);
-  };
+      }, 400);
+    } else {
+      setIsPopupVisible(true);
+    }
+    speakTourText(conceptTourSteps[next].text);
+  }, 300);
+};
 
   const handleTextEntered = () => {
     if (!waitingForSymbolRef.current) return;
     if (resetAnimationRef.current) resetAnimationRef.current();
     setWaitingForSymbol(false);
     waitingForSymbolRef.current = false;
+
+  const textEl = textInputBoxRef.current;
+  if (textEl) {
+  textEl.style.outline = '3px solid #f59e0b';
+  textEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+  textEl.style.borderRadius = '8px';
+  }
     setIsConceptTourRunning(false);
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance("Text entered. Now click Analyze Frequency.");
-    u.rate = 0.95;
-    u.onend = () => {
-      const next = conceptStep + 1;
-      setConceptStep(next);
+    speakTourText("Text entered. Now click Analyze Frequency.", () => {
+      const next = conceptStepRef.current + 1;
+      setConceptStepSynced(next);
       setWaitingForAnalyze(true);
+      waitingForAnalyzeRef.current = true;
       setIsConceptTourRunning(true);
       setIsPopupVisible(true);
-      const u2 = new SpeechSynthesisUtterance(conceptTourSteps[next].text);
-      u2.rate = 0.95;
-      window.speechSynthesis.speak(u2);
-    };
-    window.speechSynthesis.speak(u);
+      const el = conceptTourSteps[next]?.ref?.current;
+      if (el) setAnchorEl(el);
+      speakTourText(conceptTourSteps[next].text);
+    });
+  };
+
+  const goToStep = (stepIndex) => {
+    setConceptStepSynced(stepIndex);
+    const el = conceptTourSteps[stepIndex]?.ref?.current;
+    if (el) setAnchorEl(el);
+    speakTourText(conceptTourSteps[stepIndex].text);
   };
 
   return (
@@ -248,59 +370,64 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
         </span>
 
         <div style={{ position: 'relative', display: "flex", alignItems: "center", gap: '10px' }}>
-<Button title="Play"
-  ref={speechBtnRef}
-  onClick={() => {
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-      setIsHuffmanSpeaking(true);
-    } else {
-      const text = "Huffman Encoding is a data compression algorithm. Characters with higher frequency get shorter binary codes.";
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
-      utterance.onend = () => setIsHuffmanSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-      setIsHuffmanSpeaking(true);
-    }
-  }}
-  style={{ display: isHuffmanSpeaking ? "none" : "inline-flex", minWidth: "unset", padding: "0px" }}>
-  <img src={voice} alt="voice" style={{ width: "40px", height: "auto" }} />
-</Button>
 
-<Button title="Pause"
-  onClick={() => {
-    window.speechSynthesis.pause(); 
-    setIsHuffmanSpeaking(false);
-  }}
-  style={{ display: isHuffmanSpeaking ? "inline-flex" : "none", minWidth: "unset", padding: "0px" }}>
-  <img src={voice_pause} alt="voice_pause" style={{ width: "40px", height: "auto" }} />
-</Button>
+         <span ref={speechBtnRef} style={{ display: isHuffmanSpeaking ? "none" : "inline-flex" }}>
+         <Button title="Play"
+         onClick={() => {
+         if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+        setIsHuffmanSpeaking(true);
+        } else if (isConceptTourRunning) {
+        speakTourText(conceptTourSteps[conceptStep].text, () => {
+          setIsHuffmanSpeaking(false);
+        });
+        setIsHuffmanSpeaking(true);
+      }
+    }}
+    style={{ minWidth: "unset", padding: "0px" }}>
+    <img src={voice} alt="voice" style={{ width: "40px", height: "auto" }} />
+  </Button>
+</span> 
+
+          <span style={{ display: isHuffmanSpeaking ? "inline-flex" : "none" }}>
+            <Button title="Pause"
+              onClick={() => {
+                window.speechSynthesis.pause();
+                setIsHuffmanSpeaking(false);
+              }}
+              style={{ minWidth: "unset", padding: "0px" }}>
+              <img src={voice_pause} alt="voice_pause" style={{ width: "40px", height: "auto" }} />
+            </Button>
+          </span>
 
           <button
-  ref={instructionBtnRef}
-  onClick={() => {
-    window.speechSynthesis.cancel();
-    setShowInstructions(true);
-    const u = new SpeechSynthesisUtterance(
-      "Step 1: Select a symbol image or type your own text. " +
-      "Step 2: Click Analyze Frequency button. " +
-      "Step 3: Click Generate button. " +
-      "Step 4: Click Next Step repeatedly. " +
-      "Step 5: Final binary codes will be displayed. " +
-      "Step 6: Click Reset to start over."
-    );
-    u.rate = 0.95;
-    window.speechSynthesis.speak(u);
-  }}
-  style={{
-    background: "white", color: "#1d2a6d", fontWeight: 600,
-    padding: "8px 18px", borderRadius: "10px", cursor: "pointer",
-    whiteSpace: "nowrap", fontSize: "14px", width: "145px", height: "42px",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    border: "1px solid #333",
-  }}>
-  INSTRUCTIONS
-</button>
+            ref={instructionBtnRef}
+            onClick={() => {
+              window.speechSynthesis.cancel();
+              setShowInstructions(true);
+              setTimeout(() => {
+              const u = new SpeechSynthesisUtterance(
+                "Instructions of Huffman Encoding"+
+                "Step 1: Select a symbol image or type your own text. " +
+                "Step 2: Click Analyze Frequency button. " +
+                "Step 3: Click Generate button. " +
+                "Step 4: Click Next Step repeatedly. " +
+                "Step 5: Final binary codes will be displayed. " +
+                "Step 6: Click Reset to start over."
+              );
+              u.rate = 0.95;
+              window.speechSynthesis.speak(u);
+              }, 300);
+            }}
+            style={{
+              background: "white", color: "#1d2a6d", fontWeight: 600,
+              padding: "8px 18px", borderRadius: "10px", cursor: "pointer",
+              whiteSpace: "nowrap", fontSize: "14px", width: "145px", height: "42px",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              border: "1px solid #333",
+            }}>
+            INSTRUCTIONS
+          </button>
 
           <button
             ref={guidedTutorRef}
@@ -318,17 +445,17 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
           </button>
 
           <button onClick={() => {
-          window.speechSynthesis.cancel();
-          setIsHuffmanSpeaking(false);
-          setIsConceptTourRunning(false);
-          onClose();
+            window.speechSynthesis.cancel();
+            setIsHuffmanSpeaking(false);
+            setIsConceptTourRunning(false);
+            onClose();
           }}
-          style={{
-          background: 'white', color: '#1d2a6d', border: '2px solid #1d2a6d',
-          borderRadius: '8px', padding: '6px 16px', fontWeight: '600',
-          cursor: 'pointer', fontSize: '14px'
-          }}>
-          Close
+            style={{
+              background: 'white', color: '#1d2a6d', border: '2px solid #1d2a6d',
+              borderRadius: '8px', padding: '6px 16px', fontWeight: '600',
+              cursor: 'pointer', fontSize: '14px'
+            }}>
+            Close
           </button>
         </div>
 
@@ -342,12 +469,8 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
             modifiers={[{ name: 'offset', options: { offset: [0, 8] } }]}
           >
             <div style={{
-              width: '340px',
-              background: 'white',
-              borderRadius: '12px',
-              boxShadow: '0 8px 24px rgba(29,42,109,0.25)',
-              border: '2px solid #1d2a6d',
-              overflow: 'hidden',
+              width: '340px', background: 'white', borderRadius: '12px',
+              boxShadow: '0 8px 24px rgba(29,42,109,0.25)', border: '2px solid #1d2a6d', overflow: 'hidden',
             }}>
               <div style={{
                 background: 'white', padding: '10px 14px',
@@ -357,8 +480,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                   <h3>Guided Tutor is here to help!</h3>
                 </span>
                 <button onClick={() => setShowWelcome(false)} style={{
-                  background: 'transparent', border: 'none', color: '#1d2a6d',
-                  fontSize: '16px', cursor: 'pointer'
+                  background: 'transparent', border: 'none', color: '#1d2a6d', fontSize: '16px', cursor: 'pointer'
                 }}>✕</button>
               </div>
               <div style={{ padding: '12px 14px' }}>
@@ -377,18 +499,13 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                   <button onClick={() => {
                     setShowWelcome(false);
                     setIsConceptTourRunning(true);
-                    setConceptStep(0);
+                    setConceptStepSynced(0);
                     setTimeout(() => {
                       const el = conceptTourSteps[0].ref.current;
                       if (!el) return;
                       setAnchorEl(el);
                       setIsPopupVisible(true);
-                      window.speechSynthesis.cancel();
-                      const u = new SpeechSynthesisUtterance(conceptTourSteps[0].text);
-                      u.rate = 0.95;
-                      u.onend = () => setIsHuffmanSpeaking(false);
-                      window.speechSynthesis.speak(u);
-                      setIsHuffmanSpeaking(true);
+                      speakTourText(conceptTourSteps[0].text);
                     }, 500);
                   }}
                     style={{
@@ -406,7 +523,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
       </DialogTitle>
 
       {/* Tour Popup */}
-      {isConceptTourRunning && anchorEl && isPopupVisible && (
+      {isConceptTourRunning && anchorEl && isPopupVisible && !showInstructions && (
         <Popper
           open={true}
           anchorEl={anchorEl}
@@ -414,18 +531,20 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
           style={{ zIndex: 999999 }}
           modifiers={[
             { name: 'offset', options: { offset: [0, 10] } },
-            { name: 'flip', enabled: false },
-            { name: 'preventOverflow', options: { boundary: 'viewport' } },
+            { name: 'flip', enabled: true },
+            { name: 'preventOverflow', options: { boundary: 'viewport', padding: 12 } },
             { name: 'hide', enabled: false },
           ]}>
+        
           <div style={{
             width: '320px',
             background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
-            borderRadius: '18px',
-            padding: '16px',
+            borderRadius: '18px', padding: '16px',
             boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+            position: 'relative',
           }}>
-            <div style={{
+          
+           <div style={{
               textAlign: 'center', fontSize: '15px', fontWeight: '700',
               color: '#1d2a6d', marginBottom: '12px',
               borderBottom: '1px solid #cbd5e1', paddingBottom: '8px'
@@ -434,14 +553,25 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
             </div>
 
             <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.6', marginBottom: '18px' }}>
-              {conceptTourSteps[conceptStep]?.text}
+              {conceptTourSteps[conceptStep]?.text.split(" ").map((word, i) => (
+                <span key={i} style={{
+                  padding: "1px 3px", marginRight: "3px", borderRadius: "4px", display: "inline-block",
+                  background: i === tourWordIndex ? "#fff8e1" : "transparent",
+                  color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
+                  fontWeight: i === tourWordIndex ? "600" : "400",
+                  borderBottom: i === tourWordIndex ? "2px solid #f59e0b" : "2px solid transparent",
+                  transition: "all 0.15s ease",
+                }}>
+                  {word}
+                </span>
+              ))}
             </div>
 
             {showSymbolAlert && (
               <div style={{
-                background: '#fff3cd', border: '1px solid #f59e0b',
-                borderRadius: '8px', padding: '8px 12px', marginBottom: '12px',
-                fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '6px'
+                background: '#fff3cd', border: '1px solid #f59e0b', borderRadius: '8px',
+                padding: '8px 12px', marginBottom: '12px', fontSize: '13px', color: '#92400e',
+                display: 'flex', alignItems: 'center', gap: '6px'
               }}>
                 ⚠️ Please select a symbol or enter your own text before continuing.
               </div>
@@ -451,35 +581,38 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={() => {
                   setIsConceptTourRunning(false);
-                  setConceptStep(0);
+                  setConceptStepSynced(0);
                   setAnchorEl(null);
                   window.speechSynthesis.cancel();
+                  if (wordTimersRef.current) {
+                    wordTimersRef.current.forEach(t => clearTimeout(t));
+                    wordTimersRef.current = [];
+                  }
+                  setTourWordIndex(-1);
                   setIsHuffmanSpeaking(false);
+                  conceptTourSteps.forEach(step => {
+                  const el = step.ref?.current;
+                  if (el) {
+                  el.style.outline = '';
+                  el.style.boxShadow = '';
+                  el.style.borderRadius = '';
+                  }
+                  });
                 }} style={{
-                  background: 'transparent', border: '1px solid #1d2a6d',
-                  borderRadius: '10px', padding: '8px 14px',
-                  color: '#64748b', fontWeight: '600', cursor: 'pointer', fontSize: '13px'
+                  background: 'transparent', border: '1px solid #1d2a6d', borderRadius: '10px',
+                  padding: '8px 14px', color: '#64748b', fontWeight: '600', cursor: 'pointer', fontSize: '13px'
                 }}>EXIT</button>
 
                 <button
                   onClick={() => {
                     if (conceptStep > 0) {
-                      const prev = conceptStep - 1;
-                      setConceptStep(prev);
-                      setAnchorEl(conceptTourSteps[prev].ref.current);
-                      window.speechSynthesis.cancel();
-                      const u = new SpeechSynthesisUtterance(conceptTourSteps[prev].text);
-                      u.rate = 0.95;
-                      u.onend = () => setIsHuffmanSpeaking(false);
-                      window.speechSynthesis.speak(u);
-                      setIsHuffmanSpeaking(true);
+                      goToStep(conceptStep - 1);
                     }
                   }}
                   disabled={conceptStep === 0}
                   style={{
-                    background: '#d1d5db', color: '#1d2a6d',
-                    border: '1px solid #1d2a6d', padding: '8px 14px',
-                    borderRadius: '10px',
+                    background: '#d1d5db', color: '#1d2a6d', border: '1px solid #1d2a6d',
+                    padding: '8px 14px', borderRadius: '10px',
                     cursor: conceptStep === 0 ? 'not-allowed' : 'pointer',
                     fontWeight: '600', fontSize: '13px'
                   }}>Back</button>
@@ -497,20 +630,14 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                   }
                   if (conceptStep < conceptTourSteps.length - 1) {
                     const next = conceptStep + 1;
-                    setConceptStep(next);
-                    setAnchorEl(conceptTourSteps[next].ref.current);
                     if (conceptTourSteps[next]?.waitingForAnalyze) {
                       setWaitingForAnalyze(true);
+                      waitingForAnalyzeRef.current = true;
                     }
-                    window.speechSynthesis.cancel();
-                    const u = new SpeechSynthesisUtterance(conceptTourSteps[next].text);
-                    u.rate = 0.95;
-                    u.onend = () => setIsHuffmanSpeaking(false);
-                    window.speechSynthesis.speak(u);
-                    setIsHuffmanSpeaking(true);
+                    goToStep(next);
                   } else {
                     setIsConceptTourRunning(false);
-                    setConceptStep(0);
+                    setConceptStepSynced(0);
                     setAnchorEl(null);
                     window.speechSynthesis.cancel();
                   }
@@ -536,6 +663,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
               </span>
             </div>
           </div>
+          );
         </Popper>
       )}
 
@@ -559,9 +687,13 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                 <div style={{ marginTop: '16px', padding: '10px 14px', background: '#f0f4ff', borderRadius: '8px', borderLeft: '3px solid #1d2a6d', fontSize: '13px', color: '#555' }}>
                   <strong>Tip:</strong> Characters with higher frequency get shorter binary codes!
                 </div>
-                <button onClick={() =>{
-                  window.speechSynthesis.cancel();
-                   setShowInstructions(false)}}
+                <button onClick={() => {
+                   window.speechSynthesis.cancel(); 
+                   setShowInstructions(false); 
+                   if(isConceptTourRunning){
+                    speakTourText(conceptTourSteps[conceptStep].text);
+                   }
+                   }}
                   style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '15px auto 0', background: 'white', color: '#1d2a6d', border: '2px solid #1d2a6d', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontSize: '16px' }}>
                   <b>CLOSE</b>
                 </button>
@@ -571,6 +703,8 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
         )}
         {open && <HuffmanAnimation
           symbolTextToggleRef={symbolTextToggleRef}
+          symbolBoxRef={symbolBoxRef}
+          textInputBoxRef={textInputBoxRef}
           analyzeFreqRef={analyzeFreqRef}
           freqTableRef={freqTableRef}
           generateBtnRef={generateBtnRef}

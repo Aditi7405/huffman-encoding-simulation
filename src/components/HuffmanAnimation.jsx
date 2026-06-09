@@ -40,6 +40,7 @@ export default function HuffmanAnimation({
     symbolTextToggleRef, analyzeFreqRef, freqTableRef, generateBtnRef, 
   nextStepBtnRef, prevStepBtnRef, resetBtnRef, treeVisualizationRef,
   onSymbolSelected, onAnalyzeDone, onTextEntered, onRegisterReset,
+  symbolBoxRef,textInputBoxRef,
 }) {
     const [image,setImage]=useState(0);
     const [original,setOriginal]=useState(null);
@@ -172,23 +173,24 @@ export default function HuffmanAnimation({
     }    
 
     function handleAnalyze(){
-      let freqMap = {};
+  let freqMap = {};
 
-      if(inputMode === 'symbol' && original){
-          for (let row of original) {
-              for (let cell of row) {
-                  const key = cell === 1 ? "1" : "0";
-                  freqMap[key] = (freqMap[key] || 0) + 1;
-              }
-          }
-      } else {
-          for (let char of tdata) {
-              if (char !== " ") {
-                  freqMap[char] = (freqMap[char] || 0) + 1;
-              }
-          }
-          if (onAnalyzeDone) onAnalyzeDone();
+  if(inputMode === 'symbol' && original){
+    for (let row of original) {
+      for (let cell of row) {
+        const key = cell === 1 ? "1" : "0";
+        freqMap[key] = (freqMap[key] || 0) + 1;
       }
+    }
+    if (onAnalyzeDone) onAnalyzeDone(); 
+  } else {
+    for (let char of tdata) {
+      if (char !== " ") {
+        freqMap[char] = (freqMap[char] || 0) + 1;
+      }
+    }
+    if (onAnalyzeDone) onAnalyzeDone();
+  }
 
       const result = Object.entries(freqMap).map(([char, freq]) => ({char, freq}));
       setFrequencyData(result);
@@ -454,7 +456,8 @@ export default function HuffmanAnimation({
     </div>
 
 {/* SYMBOL BOX */}  
-    <div id="Choose_box_comp" style={{
+    <div id="Choose_box_comp" ref={symbolBoxRef}
+    style={{
     opacity: inputMode === 'symbol' ? 1 : 0.3,
     pointerEvents: inputMode === 'symbol' ? 'auto' : 'none',
     transition: '0.3s',
@@ -490,6 +493,7 @@ export default function HuffmanAnimation({
 
 {/* TEXT INPUT BOX */}
     <textarea
+    ref={textInputBoxRef}
     className="text_box"
     placeholder='Enter data here'
     value={tdata}

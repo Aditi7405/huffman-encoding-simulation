@@ -842,27 +842,19 @@ const goToStep = (index) => {
 };
 
 const handleNextTourStep = () => {
-
-  if (
-    tourSteps[tourStep]?.refKey === "quantization" &&
-    (!qfactor || qfactor <= 0)
-  ) {
+  if (tourSteps[tourStep]?.refKey === "quantization" && (!qfactor || qfactor <= 0)) {
     setShowActionRequired(true);
     speakTourText("Please enter a valid Quantization Factor before proceeding.");
     return;
   }
-  if (tourSteps[tourStep]?.refKey === "quantization" && qfactor > 0) {
-    setShowActionRequired(false);
-    const processStep = tourSteps.findIndex(s => s.refKey === "process");
-    if (processStep !== -1) {
-      goToStep(processStep);
-    }
-    return;
-  }
+
+  setShowActionRequired(false);
+
   if (tourStep === tourSteps.length - 1) {
     stopTour();
     return;
   }
+
   goToStep(tourStep + 1);
 };
 
@@ -984,24 +976,22 @@ const getArrowStyle = (placement) => {
   };
 
   if (dir === 'bottom') {
-    // popup neeche hai → arrow upar hoga
     return {
       ...base,
       marginLeft: '20px',
       marginBottom: '-8px',
       borderTop: '2px solid #1d2a6d',
       borderLeft: '2px solid #1d2a6d',
-      order: -1, // arrow pehle
+      order: -1, 
     };
   } else if (dir === 'top') {
-    // popup upar hai → arrow neeche hoga
     return {
       ...base,
       marginLeft: '20px',
       marginTop: '-8px',
       borderBottom: '2px solid #1d2a6d',
       borderRight: '2px solid #1d2a6d',
-      order: 1, // arrow baad mein
+      order: 1, 
     };
   } else if (dir === 'right') {
     return {
@@ -1258,7 +1248,7 @@ const getArrowStyle = (placement) => {
     ]}
     style={{ zIndex: 9999 }}
   >
-  <div style={{ display: 'flex', flexDirection: 'column', }}>
+  <div style={{ display: 'flex', flexDirection: 'column',}}>
     <div style={{
       width: '16px',
       height: '16px',
@@ -1273,10 +1263,11 @@ const getArrowStyle = (placement) => {
       flexShrink: 0,
     }}/>
     <Paper elevation={6} sx={{
-      width: '350px',
+      width: '320px',
+      background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
       borderRadius: '12px',
       padding: '12px',
-      background: '#fff',
+      boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
       position: 'relative',
       zIndex: 1,
     }}>
@@ -1284,24 +1275,27 @@ const getArrowStyle = (placement) => {
       <div style={{
         position: 'absolute',
         top: '-10px',
-        right: '24px',
+        right: '22px',
         width: '16px',
         height: '16px',
-        background: '#dbeafe',
+        background: 'rgb(219,234,254)',
         transform: 'rotate(45deg)',
         borderTop: '2px solid #1d2a6d',
-        borderRight: '2px solid #1d2a6d',
-        zIndex: 1,
+        borderLeft: '2px solid #1d2a6d',
+        zIndex: 2,
       }}/>
 
-      <h2 style={{
-        margin: '0 0 10px',
-        color: '#1d2a6d',
-        fontSize: '14px',
-        fontWeight: '700'
-      }}>
-        Guided Tutor is here to help!
-      </h2>
+      <div style={{
+    textAlign: 'center',
+    fontSize: '16px',
+    fontWeight: '700',
+    color: '#1d2a6d',
+    marginBottom: '12px',
+    borderBottom: '1px solid #cbd5e1',
+    paddingBottom: '8px',
+  }}>
+    Guided Tutor is here to help!
+  </div>
 
       <p style={{
         fontSize: '14px',
@@ -1374,6 +1368,8 @@ const getArrowStyle = (placement) => {
 
     <div style={{
     display: 'flex',
+    border: '2px solid #1d2a6d',
+    borderRadius: '18px',
     flexDirection: tourPlacement?.startsWith('left') || tourPlacement?.startsWith('right') 
       ? 'row' 
       : 'column',
@@ -1425,7 +1421,7 @@ const getArrowStyle = (placement) => {
         fontWeight: "700",
         color: "#1d2a6d",
         marginBottom: "12px",
-        borderBottom: "1px solid #cbd5e1",
+        borderBottom: "1px solid ",
         paddingBottom: "8px",
       }}>
         {showActionRequired ? "⚠️ Action Required" : tourSteps[tourStep]?.title}
@@ -1440,7 +1436,7 @@ const getArrowStyle = (placement) => {
         marginBottom: "18px",
       }}>
         {showActionRequired ? (
-         "Action Required. Please enter a valid Quantization Factor before proceeding."
+         "Please enter a valid Quantization Factor before proceeding."
     .split(" ").map((word, i) => (
       <span key={i} style={{
         padding: "1px 3px",
