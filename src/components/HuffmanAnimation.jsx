@@ -40,7 +40,7 @@ export default function HuffmanAnimation({
     symbolTextToggleRef, analyzeFreqRef, freqTableRef, generateBtnRef, 
   nextStepBtnRef, prevStepBtnRef, resetBtnRef, treeVisualizationRef,
   onSymbolSelected, onAnalyzeDone, onTextEntered, onRegisterReset,
-  symbolBoxRef,textInputBoxRef,
+  symbolBoxRef,textInputBoxRef, onGenerate, onReset,
 }) {
     const [image,setImage]=useState(0);
     const [original,setOriginal]=useState(null);
@@ -351,6 +351,16 @@ export default function HuffmanAnimation({
     }
 
     function handleImage(x){
+      setCurrentStep(-1);
+      setTree(null);
+      setShowInitialNodes(false);
+      setIsComplete(false);
+      setFrequencyData([]);
+      setEncodedTable([]);
+      setEncodedText('');
+      setShowEdgeExplanation(false);
+      setTreeReady(false);
+
       setImage(x);
       const signs = [
           [
@@ -499,6 +509,17 @@ export default function HuffmanAnimation({
     value={tdata}
     onChange={(e) => { 
         setTdata(e.target.value);
+        setCurrentStep(-1);
+        setTree(null);
+        setShowInitialNodes(false);
+        setIsComplete(false);
+        setFrequencyData([]);
+        setEncodedTable([]);
+        setEncodedText('');
+        setShowEdgeExplanation(false);
+        setOriginal(null);
+        setImage(0);
+        
     if (e.target.value.length > 0 && onTextEntered) {
         onTextEntered();
     }
@@ -593,6 +614,70 @@ export default function HuffmanAnimation({
          className="tree-header">
         TREE VISUALIZATION
         </div>
+        <div className="controls-bottom">
+            <button 
+            ref={generateBtnRef}
+            className="control-btn"
+                onClick={ () => {
+                    handleGenerateTree();
+                    if (onGenerate) onGenerate();
+                }}
+                disabled={frequencyData.length === 0 || (showInitialNodes && !isComplete)}
+                style={{ opacity: frequencyData.length === 0 || (showInitialNodes && !isComplete)
+                ? 0.4 : 1, cursor: frequencyData.length === 0 || (showInitialNodes && !isComplete)
+                ? 'not-allowed' : 'pointer',
+                borderRadius: '999px'
+                }}>
+                Generate
+            </button>
+
+            <button 
+            ref={nextStepBtnRef}
+            className="control-btn"
+                onClick={handleNextStep}
+                disabled={frequencyData.length === 0 || !showInitialNodes || isComplete}
+                style={{opacity: frequencyData.length === 0 || !showInitialNodes || isComplete
+                ? 0.4 : 1, cursor: frequencyData.length === 0 || !showInitialNodes || isComplete
+                ? 'not-allowed' : 'pointer',
+                borderRadius: '999px',}}>
+                Next Step
+            </button>
+
+            <button 
+            ref={prevStepBtnRef}
+            className="control-btn"
+               onClick={handlePreviousStep}
+               disabled={frequencyData.length === 0 || !showInitialNodes}
+               style={{
+               opacity: frequencyData.length === 0 || !showInitialNodes ? 0.4 : 1,
+               cursor: frequencyData.length === 0 || !showInitialNodes ? 'not-allowed' : 'pointer',
+               borderRadius: '999px',
+               }}>
+               Prev Step
+            </button>
+
+            <button 
+            ref={resetBtnRef}
+            className="control-btn"
+                onClick={() => {
+                    setCurrentStep(-1);
+                    setTree(null);
+                    setShowInitialNodes(false);
+                    setIsComplete(false);
+                    setFrequencyData([]);
+                    setTdata('');
+                    setShowEdgeExplanation(false);
+                    if(onReset) onReset();
+                }}
+                disabled={frequencyData.length === 0}
+                style={{opacity: frequencyData.length === 0
+                ? 0.4 : 1, cursor: frequencyData.length === 0
+                ? 'not-allowed' : 'pointer',
+                borderRadius: '9999px'}}>
+                Reset
+            </button>
+        </div>
+
         <div 
         ref={treeVisualizationRef}
         className="tree-body">
@@ -775,63 +860,7 @@ export default function HuffmanAnimation({
             </table>
         </div>
         </>
-        )}  
-
-        <div className="controls-bottom">
-            <button 
-            ref={generateBtnRef}
-            className="control-btn"
-                onClick={handleGenerateTree}
-                disabled={frequencyData.length === 0 || (showInitialNodes && !isComplete)}
-                style={{ opacity: frequencyData.length === 0 || (showInitialNodes && !isComplete)
-                ? 0.4 : 1, cursor: frequencyData.length === 0 || (showInitialNodes && !isComplete)
-                ? 'not-allowed' : 'pointer'}}>
-                Generate
-            </button>
-
-            <button 
-            ref={nextStepBtnRef}
-            className="control-btn"
-                onClick={handleNextStep}
-                disabled={frequencyData.length === 0 || !showInitialNodes || isComplete}
-                style={{opacity: frequencyData.length === 0 || !showInitialNodes || isComplete
-                ? 0.4 : 1, cursor: frequencyData.length === 0 || !showInitialNodes || isComplete
-                ? 'not-allowed' : 'pointer'}}>
-                Next Step
-            </button>
-
-            <button 
-            ref={prevStepBtnRef}
-            className="control-btn"
-               onClick={handlePreviousStep}
-               disabled={frequencyData.length === 0 || !showInitialNodes}
-               style={{
-               opacity: frequencyData.length === 0 || !showInitialNodes ? 0.4 : 1,
-               cursor: frequencyData.length === 0 || !showInitialNodes ? 'not-allowed' : 'pointer'
-               }}>
-               Prev Step
-            </button>
-
-            <button 
-            ref={resetBtnRef}
-            className="control-btn"
-                onClick={() => {
-                    setCurrentStep(-1);
-                    setTree(null);
-                    setShowInitialNodes(false);
-                    setIsComplete(false);
-                    setFrequencyData([]);
-                    setTdata('');
-                    setShowEdgeExplanation(false);
-                }}
-                disabled={frequencyData.length === 0}
-                style={{opacity: frequencyData.length === 0
-                ? 0.4 : 1, cursor: frequencyData.length === 0
-                ? 'not-allowed' : 'pointer'}}>
-                Reset
-            </button>
-        </div>
-
+        )}       
     </div>
 </div>
 </div>

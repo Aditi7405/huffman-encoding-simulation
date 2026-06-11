@@ -203,14 +203,13 @@ export default function HuffmanPage() {
       setTutorPaused(true);
       
     }
-    window.print(); // Triggers the print dialog
+    window.print(); 
   };
 
  
 
   const cv = window.cv;
   const [mrl, setMrl] = useState("");
-  //const [mrl,setMrl]=useState(1);
   const [qfactor, setQfactor] = useState("");
   const [quality, setQuality] = useState("");
   const [hresult, setHresult] = useState(null);
@@ -240,6 +239,7 @@ export default function HuffmanPage() {
   const [showConceptWelcome, setShowConceptWelcome] = useState(false);
   const [tourPlacement, setTourPlacement] = useState("bottom-end");
   const [actionRequiredShown, setActionRequiredShown] = useState(false);
+  const [isSpeechEnabled, setIsSpeechEnabled] = useState(true);
  
    
   function calculateEntropyMap(srcGray) {
@@ -471,7 +471,7 @@ export default function HuffmanPage() {
   
 
   useEffect (() => {
-    setTourWordIndex(0);
+    setTourWordIndex(-1);
     pausedWordIndexRef.current = 0;
   }, [tourStep]);
 
@@ -498,7 +498,7 @@ export default function HuffmanPage() {
 
     const utterance = new SpeechSynthesisUtterance(speakText);
    
-    utterance.rate = 0.95;
+    utterance.rate = 0.90;
     utterance.pitch = 1;
     utterance.volume = 1;
 
@@ -560,29 +560,18 @@ const startGuidedTutor = () => {
 };
 
 const handleTutorToggle = () => {
-  if (isTourPlaying) {
-    pausedWordIndexRef.current = tourWordIndex;
-    clearTimeout(highlightTimeoutRef.current);
-    isTourPlayingRef.current = false;
+  if (isSpeechEnabled) {
     window.speechSynthesis.cancel();
-    setIsTourPlaying(false);
-    return;
-  }
-  
-  if (tourStep === -1) {
-    isTourCancelledRef.current = false;
-    isTourPlayingRef.current = true;
-    startTour();
-    return;
-  }
-
-  setTourWordIndex(0);
-  pausedWordIndexRef.current = 0;
-  isTourPlayingRef.current = true;
-  setIsTourPlaying(true);
-  const step = tourSteps[tourStep];
-  if(step) {
-    speakTourText(step.text);
+    wordTimersRef.current.forEach(t => clearTimeout(t));
+    wordTimersRef.current = [];
+    setTourWordIndex(-1);
+    setIsSpeechEnabled(false);
+  } else {
+    setIsSpeechEnabled(true);
+    if (tourStep >= 0) {
+      const step = tourSteps[tourStep];
+      if (step) speakTourText(step.text);
+    }
   }
 };
 
@@ -598,7 +587,6 @@ const speakStep = () => {
     return;
   }
 
-  // PEHLE highlight update karo
   currentTutorStepRef.current = stepIndexRef.current;
   setCurrentTutorStep(stepIndexRef.current);
 
@@ -606,14 +594,14 @@ const speakStep = () => {
     step.ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
-  // 100ms baad speech shuru karo
+  
   setTimeout(() => {
     if (isTutorCancelledRef.current) return;
 
     const utterance = new SpeechSynthesisUtterance(step.text);
     const voices = speechSynthesis.getVoices();
     if (voices.length) utterance.voice = voices[0];
-    utterance.rate = 0.95;
+    utterance.rate = 0.90;
     utterance.pitch = 1;
     utterance.volume = 1;
 
@@ -779,29 +767,24 @@ const speakTourText = (text, onDone) => {
     const utterance = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
     if (voices.length > 0) utterance.voice = voices[0];
-    utterance.rate = 0.95;
+    utterance.rate = 0.90;
     utterance.pitch = 1;
     utterance.volume = 1;
 
-    const words = text.split(' ');
-    const msPerWord = 420;
-
-    setTourWordIndex(0);
-    words.forEach((_, i) => {
-      const timer = setTimeout(() => {
-        setTourWordIndex(i);
-      }, i * msPerWord);
-      wordTimersRef.current.push(timer);
-    });
-
-    utterance.onend = () => {
+  utterance.onboundary = (event) => {
+      if (event.name === 'word') {
+        const spokenText = text.substring(0, event.charIndex);
+        const wordIndex = spokenText.split(' ').length - 1;
+        if (isSpeechEnabled) setTourWordIndex(wordIndex);
+      }
+    };
+  utterance.onend = () => {
       wordTimersRef.current.forEach(t => clearTimeout(t));
       wordTimersRef.current = [];
       setTourWordIndex(-1);
       if (onDone) onDone();
     };
-
-    utterance.onerror = () => {
+  utterance.onerror = () => {
       wordTimersRef.current.forEach(t => clearTimeout(t));
       wordTimersRef.current = [];
       if (onDone) onDone();
@@ -818,7 +801,7 @@ const goToStep = (index) => {
     setTourStep(-1);
     
     setIsTourPlaying(false);
-    setTourWordIndex(0);
+    setTourWordIndex(-1);
     setHighlightedRefKey(null);
     setAnchorEl(null);
     window.speechSynthesis.cancel();
@@ -835,16 +818,20 @@ const goToStep = (index) => {
   setTourPlacement(step.placement || "bottom-start"); 
   window.speechSynthesis.cancel();
   setTourStep(index);
-  setTourWordIndex(0);
+  setTourWordIndex(-1);
   updateTourPos(step.refKey);
-  speakTourText(step.text);
-  
+  if (isSpeechEnabled) speakTourText(step.text); 
 };
 
 const handleNextTourStep = () => {
   if (tourSteps[tourStep]?.refKey === "quantization" && (!qfactor || qfactor <= 0)) {
     setShowActionRequired(true);
-    speakTourText("Please enter a valid Quantization Factor before proceeding.");
+    if (isSpeechEnabled) speakTourText("Please enter a valid Quantization Factor before proceeding.");
+    return;
+  }
+  if(tourSteps[tourStep]?.refKey === "process" && !isImageProcessed) {
+    setShowActionRequired(true);
+    if (isSpeechEnabled) speakTourText("Please click the process button before processing.");
     return;
   }
 
@@ -871,7 +858,7 @@ const stopTour = () => {
   window.speechSynthesis.cancel();
   setTourStep(-1);
   setIsTourPlaying(false);
-  setTourWordIndex(0);
+  setTourWordIndex(-1);
   setAnchorEl(null);
   wordTimersRef.current.forEach(t => clearTimeout(t));
   wordTimersRef.current = [];
@@ -933,7 +920,7 @@ const handleConceptClick = () => {
   clearTimeout(highlightTimeoutRef.current);
   setIsTourPlaying(false);
   setTourStep(-1);
-  setTourWordIndex(0);
+  setTourWordIndex(-1);
   pausedWordIndexRef.current = 0;
 
   exp2();
@@ -1039,7 +1026,9 @@ const getArrowStyle = (placement) => {
               style={{
                 display: "flex",
                 alignItems: "center",
-                marginRight: "8px"
+                marginRight: "10px",
+                ...getHighlightStyle("speech"),
+                borderRadius: "8px",
               }}>
             <Button title="Play" ref={voicePlay} onClick={handleTutorToggle}
             style={{ display: isTourPlaying? "none" : "inline-flex",
@@ -1105,6 +1094,9 @@ const getArrowStyle = (placement) => {
             <button 
             ref={guidedTutorBtnRef}
             className="guided-tutor-btn"
+            style={{
+              ...getHighlightStyle("guidedTutor"),
+            }}
             onClick={() => { 
               if (isTourPlaying || tourStep >= 0) {
                 stopTour();
@@ -1257,8 +1249,8 @@ const getArrowStyle = (placement) => {
       borderTop: '1px solid #e0e0e0',
       borderLeft: '1px solid #e0e0e0',
       marginLeft: 'auto',
-      marginRight: '20px',
-      marginBottom: '-8px',
+      marginRight: '22px',
+      marginBottom: '-10px',
       zIndex: 0,
       flexShrink: 0,
     }}/>
@@ -1268,6 +1260,7 @@ const getArrowStyle = (placement) => {
       borderRadius: '12px',
       padding: '12px',
       boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+      border: '2px solid #1d2a6d',
       position: 'relative',
       zIndex: 1,
     }}>
@@ -1362,7 +1355,7 @@ const getArrowStyle = (placement) => {
         options: { fallbackPlacements: ['top-start', 'bottom-end', 'top-end'] }
       },
       { name: 'preventOverflow', options: { boundary: 'window', padding: 8 } },
-      { name: 'offset', options: { offset: [0, 12] } },
+      { name: 'offset', options: { offset: [0, 20] } },
     ]}
     style={{ zIndex: 9999 }}>
 
@@ -1387,7 +1380,6 @@ const getArrowStyle = (placement) => {
       position: 'relative',
       zIndex: 1,
     }}>
-    {/* ✅ YAHAN REPLACE KARO — dynamic */}
 <div style={{
   position: 'absolute',
   
@@ -1443,9 +1435,9 @@ const getArrowStyle = (placement) => {
         marginRight: "3px",
         borderRadius: "4px",
         display: "inline-block",
-        background: i === tourWordIndex ? "#fff8e1" : "transparent",
-        color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
-        fontWeight: i === tourWordIndex ? "600" : "400",
+        background: (i === tourWordIndex && isSpeechEnabled) ? "#fff8e1" : "transparent",
+        color: (i === tourWordIndex && isSpeechEnabled) ? "#92400e" : "#1d2a6d",
+        fontWeight: (i === tourWordIndex && isSpeechEnabled) ? "600" : "400",
       }}>
         {word}
       </span>
@@ -1507,17 +1499,23 @@ const getArrowStyle = (placement) => {
           onClick={handleNextTourStep}
           disabled={false}
           style={{
-            background: (showActionRequired && (!qfactor || qfactor <= 0))
-              ? "#9ca3af" : "#1d2a6d",
-            color: "white",
-            border: "none",
-            padding: "8px 18px",
-            borderRadius: "10px",
-            cursor: (showActionRequired && (!qfactor || qfactor <= 0))
-              ? "not-allowed" : "pointer",
-            fontWeight: "600",
-            fontSize: "14px",
-            transition: "all 0.3s ease",
+          background: (
+          (tourSteps[tourStep]?.refKey === "quantization" && showActionRequired && (!qfactor || qfactor <= 0)) ||
+          (tourSteps[tourStep]?.refKey === "process" && !isImageProcessed)
+          ) ? "#9ca3af" : "#1d2a6d",
+          color: "white",
+          border: "none",
+          padding: "8px 18px",
+          borderRadius: "10px",
+          minWidth: "80px",
+          textAlign: "center",
+          cursor: (
+          (tourSteps[tourStep]?.refKey === "quantization" && showActionRequired && (!qfactor || qfactor <= 0)) ||
+          (tourSteps[tourStep]?.refKey === "process" && !isImageProcessed)
+          ) ? "not-allowed" : "pointer",
+          fontWeight: "600",
+          fontSize: "14px",
+          transition: "all 0.3s ease",  
           }}>
           {tourStep === tourSteps.length - 1 ? "Finish" : "Next"}
         </button>
@@ -1958,7 +1956,6 @@ const getArrowStyle = (placement) => {
                 >
                   <Button
                     ref={processButtonRef}
-                    // ref={myProcess2Button}
                     class="tool_btn"
                     style={getHighlightStyle("process")}
                     
