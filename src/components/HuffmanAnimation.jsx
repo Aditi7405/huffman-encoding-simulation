@@ -508,7 +508,9 @@ export default function HuffmanAnimation({
     placeholder='Enter data here'
     value={tdata}
     onChange={(e) => { 
+        const newVal = e.target.value;
         setTdata(e.target.value);
+        setTdata(newVal);
         setCurrentStep(-1);
         setTree(null);
         setShowInitialNodes(false);
@@ -521,7 +523,7 @@ export default function HuffmanAnimation({
         setImage(0);
         
     if (e.target.value.length > 0 && onTextEntered) {
-        onTextEntered();
+    onTextEntered();
     }
     }}
     disabled={inputMode === 'symbol'}

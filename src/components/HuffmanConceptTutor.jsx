@@ -99,6 +99,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   const isTreeGeneratedRef = useRef(false);
   const isAnalyzeDoneRef = useRef(false);
   const isSpeechEnabledRef = useRef(true);
+  const hasDeclinedRef = useRef(false);
 
   const setConceptStepSynced = (val) => {
     conceptStepRef.current = val;
@@ -108,31 +109,31 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   const conceptTourSteps = [
     {
       title: "Guided Tutor",
-      text: "Welcome to Huffman Concept! I will guide you through this visualization step by step.",
+      text: "Welcome to Huffman Encoding Visualization! This guided tour will walk you through each component of the simulator, helping you understand how Huffman Encoding works in practice.",
       ref: guidedTutorRef,
       placement: "bottom-end",
     },
     {
       title: "Instructions Button",
-      text: "Click the Instructions button to view step by step procedure for using this visualization.",
+      text: "The Instructions panel provides a complete step-by-step walkthrough of the simulation process. Refer to it anytime you need a quick refresher on how to operate the visualizer.",
       ref: instructionBtnRef,
       placement: "bottom-start",
     },
     {
       title: "Speech Button",
-      text: "Click this button to listen to an audio explanation of Huffman Encoding concept.",
+      text: "Toggle audio narration using this button. When enabled, the system will vocally explain each concept as you progress through the visualization.",
       ref: speechBtnRef,
       placement: "bottom-start",
     },
     {
       title: "Symbol / Text Input",
-      text: "Select a symbol like Plus, Minus, Multiply or Divide. Or switch to Text Input and type your own text.",
+      text: "Choose your input mode — select a mathematical symbol such as Plus, Minus, Multiply, or Divide, or switch to Text Input mode and enter any custom string to begin encoding.",
       ref: symbolTextToggleRef,
       waitingForSymbol: true,
     },
     {
       title: "Analyze Frequency",
-      text: "Click Analyze Frequency button. It will count how many times each character appears and show a frequency table.",
+      text: "Click Analyze Frequency to compute the character frequency distribution of your input. This step is fundamental — Huffman Encoding relies entirely on character frequencies to assign optimal binary codes.",
       ref: analyzeFreqRef,
       waitingForAnalyze: true,
       requiresAnalyze: true,
@@ -141,13 +142,13 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
     },
     {
       title: "Frequency Table",
-      text: "This table shows each character and how many times it appears in the input.",
+      text: "The Frequency Table displays each unique character alongside its occurrence count. Characters with higher frequency will receive shorter binary codes, forming the basis of Huffman's compression strategy.",
       ref: freqTableRef,
       placement: "bottom-end",
     },
     {
       title: "Generate Tree",
-      text: "Click Generate button. Initial nodes will appear on screen, each representing a character with its frequency.",
+      text: "Click Generate to initialize the Huffman Tree. Each character is represented as a leaf node, sorted in ascending order of frequency — ready for the tree-building process to begin.",
       ref: generateBtnRef,
       placement: "left-start",
       requiresGenerate: true,
@@ -155,25 +156,25 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
     },
     {
       title: "Next Step",
-      text: "Click Next Step repeatedly. First two lowest frequency nodes get highlighted in orange — this is the Select phase.",
+      text: "Press Next Step to advance the tree construction. The two nodes with the lowest frequencies are highlighted and merged iteratively until a single root node remains — this is the core of Huffman's greedy algorithm.",
       ref: nextStepBtnRef,
       placement: "left-start",   
     },
     {
       title: "Tree Visualization Box",
-      text: "Watch the Huffman Tree build here step by step. Each node shows character and its frequency.",
+      text: "This panel renders the Huffman Tree in real time. Observe how nodes combine step by step, with edge labels 0 and 1 representing the binary path from root to each character.You can see the full description below the tree visualization area.",
       ref: treeVisualizationRef,
       placement: "left",
     },
     {
       title: "Prev Step",
-      text: "Click Prev Step to go back to the previous step of tree building.",
+      text: "Use Prev Step to navigate backwards through the tree construction process — useful for reviewing any merging step in detail.",
       ref: prevStepBtnRef,
       placement: "left-start",
     },
     {
       title: "Reset",
-      text: "Click Reset to clear everything and start over with a new input. You have completed the walkthrough!",
+      text: "Click Reset to clear the current simulation entirely and start fresh with a new input. You have successfully completed the full walkthrough of the Huffman Encoding Visualizer!",
       ref: resetBtnRef,
       placement: "right-start",
     },
@@ -222,6 +223,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
       setWelcomeAnchorEl(null);
       setIsConceptTourRunning(false);
       setAnchorEl(null);
+      hasDeclinedRef.current = false;
     }
     return () => clearTimeout(timer);
   }, [open]);
@@ -237,6 +239,10 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   }, []);
 
   useEffect(() => {
+    const symbolEl = symbolBoxRef.current;
+    const textEl = textInputBoxRef.current;
+    if (symbolEl) { symbolEl.style.outline= ''; symbolEl.style.boxShadow = ''; symbolEl.style.borderRadius = '';}
+    if (textEl) {textEl.style.outline = ''; textEl.style.boxShadow = '';symbolEl.style.borderRadius = ''; }
   if (!isConceptTourRunning) {
     conceptTourSteps.forEach(step => {
       const el = step.ref?.current;
@@ -338,6 +344,7 @@ useEffect(() => {
   };
 
   const handleSymbolSelected = (index) => {
+    console.log("handleSymbolSelected called, waiting:", waitingForSymbolRef.current, "tourRunning:", isConceptTourRunning);
     if (!waitingForSymbolRef.current) return;
     if (resetAnimationRef.current) resetAnimationRef.current();
     setWaitingForSymbol(false);
@@ -356,7 +363,8 @@ useEffect(() => {
       setWaitingForAnalyze(true);
       waitingForAnalyzeRef.current = true;
       setIsConceptTourRunning(true);
-      setIsPopupVisible(true);
+      setAnchorEl(null);
+      setIsPopupVisible(false);
       const el = conceptTourSteps[next]?.ref?.current;
       if (el) setAnchorEl(el);
       speakTourText(conceptTourSteps[next].text);
@@ -407,7 +415,8 @@ useEffect(() => {
       setWaitingForAnalyze(true);
       waitingForAnalyzeRef.current = true;
       setIsConceptTourRunning(true);
-      setIsPopupVisible(true);
+      setAnchorEl(null);
+      setIsPopupVisible(false);
       const el = conceptTourSteps[next]?.ref?.current;
       if (el) setAnchorEl(el);
       speakTourText(conceptTourSteps[next].text);
@@ -518,8 +527,22 @@ useEffect(() => {
           <button
             ref={guidedTutorRef}
             onClick={() => {
+            if (hasDeclinedRef.current || isConceptTourRunning) {
+            hasDeclinedRef.current = false;
+            setShowWelcome(false);
+            setIsConceptTourRunning(true);
+            setConceptStepSynced(0);
+            setTimeout(() => {
+                const el = conceptTourSteps[0].ref.current;
+                if (!el) return;
+                setAnchorEl(el);
+                setIsPopupVisible(true);
+                speakTourText(conceptTourSteps[0].text);
+            }, 500);
+            } else {
               setShowWelcome(true);
               setWelcomeAnchorEl(guidedTutorRef.current);
+            }
             }}
             style={{
               background: "white", 
@@ -606,7 +629,9 @@ useEffect(() => {
         </p>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-          <button onClick={() => setShowWelcome(false)}
+          <button onClick={() => {
+            hasDeclinedRef.current = true;
+            setShowWelcome(false)}}
             style={{
               background: '#f3f4f6', color: '#1d2a6d',
               border: '1px solid #1d2a6d', padding: '8px 20px',
@@ -905,6 +930,14 @@ useEffect(() => {
             isTreeGeneratedRef.current = false;
             setIsAnalyzeDone(false);
             isAnalyzeDoneRef.current = false;
+            setIsConceptTourRunning(false);
+            setAnchorEl(null);
+            setIsPopupVisible(false);
+            setWaitingForAnalyze(false);
+            waitingForAnalyzeRef.current = false;
+            setWaitingForSymbol(false);
+            waitingForSymbolRef.current = false;
+            window.speechSynthesis.cancel();
           }}
         />}
       </DialogContent>
