@@ -1234,7 +1234,7 @@ const getArrowStyle = (placement) => {
     anchorEl={guidedTutorBtnRef.current}
     placement="bottom-end"
     modifiers={[
-      { name: 'flip', enabled: true },
+      { name: 'flip', enabled: false },
       { name: 'preventOverflow', options: { boundary: 'window', padding: 8 } },
       { name: 'offset', options: { offset: [0, 12] } },
     ]}
@@ -1351,7 +1351,7 @@ const getArrowStyle = (placement) => {
     anchorEl={anchorEl}
     placement={tourPlacement}
     modifiers={[
-      { name: 'flip', enabled: true,
+      { name: 'flip', enabled: false,
         options: { fallbackPlacements: ['top-start', 'bottom-end', 'top-end'] }
       },
       { name: 'preventOverflow', options: { boundary: 'window', padding: 8 } },
@@ -1361,8 +1361,6 @@ const getArrowStyle = (placement) => {
 
     <div style={{
     display: 'flex',
-    border: '2px solid #1d2a6d',
-    borderRadius: '18px',
     flexDirection: tourPlacement?.startsWith('left') || tourPlacement?.startsWith('right') 
       ? 'row' 
       : 'column',
@@ -1377,6 +1375,7 @@ const getArrowStyle = (placement) => {
       borderRadius: '18px',
       padding: '16px',
       boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+      border: '2px solid #1d2a6d',
       position: 'relative',
       zIndex: 1,
     }}>
@@ -1428,8 +1427,10 @@ const getArrowStyle = (placement) => {
         marginBottom: "18px",
       }}>
         {showActionRequired ? (
-         "Please enter a valid Quantization Factor before proceeding."
-    .split(" ").map((word, i) => (
+          (tourSteps[tourStep]?.refKey === "process"
+          ? "Please clcik the process button to run the experiment first."
+          : "Please enter a valid quantization factor before proceeding."
+        ).split(" ").map((word, i) => (
       <span key={i} style={{
         padding: "1px 3px",
         marginRight: "3px",

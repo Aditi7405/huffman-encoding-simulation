@@ -100,6 +100,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   const isAnalyzeDoneRef = useRef(false);
   const isSpeechEnabledRef = useRef(true);
   const hasDeclinedRef = useRef(false);
+  const isHandlingSymbolRef = useRef(false);
 
   const setConceptStepSynced = (val) => {
     conceptStepRef.current = val;
@@ -138,7 +139,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
       waitingForAnalyze: true,
       requiresAnalyze: true,
       placement: "right",
-      offset: [100,10],
+      offset: [140,10],
     },
     {
       title: "Frequency Table",
@@ -194,19 +195,11 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   }, [isConceptTourRunning]);
 
   useEffect(() => {
-    if (!isConceptTourRunning) return;
-    const currentRef = conceptTourSteps[conceptStep]?.ref;
-    const el = currentRef?.current;
-    setIsPopupVisible(false);
-    setAnchorEl(null);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const timer = setTimeout(() => {
-        setAnchorEl(el);
-        setIsPopupVisible(true);
-      }, 600);
-      return () => clearTimeout(timer);
-    }
+  if (!isConceptTourRunning) return;
+  const el = conceptTourSteps[conceptStep]?.ref?.current;
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
   }, [conceptStep, isConceptTourRunning]);
 
   useEffect(() => {
@@ -343,93 +336,101 @@ useEffect(() => {
     }, 150);
   };
 
-  const handleSymbolSelected = (index) => {
-    console.log("handleSymbolSelected called, waiting:", waitingForSymbolRef.current, "tourRunning:", isConceptTourRunning);
-    if (!waitingForSymbolRef.current) return;
-    if (resetAnimationRef.current) resetAnimationRef.current();
-    setWaitingForSymbol(false);
-    waitingForSymbolRef.current = false;
+const handleSymbolSelected = (index) => {
+  if (!waitingForSymbolRef.current) return;
+  if (isHandlingSymbolRef.current) return;
+  isHandlingSymbolRef.current = true;
+
+  if (resetAnimationRef.current) resetAnimationRef.current();
+  setWaitingForSymbol(false);
+  waitingForSymbolRef.current = false;
+
   const symbolEl = symbolBoxRef.current;
   if (symbolEl) {
-  symbolEl.style.outline = '3px solid #f59e0b';
-  symbolEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
-  symbolEl.style.borderRadius = '8px';
+    symbolEl.style.outline = '3px solid #f59e0b';
+    symbolEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+    symbolEl.style.borderRadius = '8px';
   }
 
-    const name = symbolNames[index];
-    speakTourText(`You selected ${name}.`, () => {
-      const next = conceptStepRef.current + 1;
-      setConceptStepSynced(next);
-      setWaitingForAnalyze(true);
-      waitingForAnalyzeRef.current = true;
-      setIsConceptTourRunning(true);
-      setAnchorEl(null);
-      setIsPopupVisible(false);
-      const el = conceptTourSteps[next]?.ref?.current;
-      if (el) setAnchorEl(el);
-      speakTourText(conceptTourSteps[next].text);
-    });
-  };
+  const name = symbolNames[index];
+  speakTourText(`You selected ${name}.`, () => {
+    const next = conceptStepRef.current + 1;
+   // setConceptStepSynced(next);
+    setWaitingForAnalyze(true);
+    waitingForAnalyzeRef.current = true;
+    setIsConceptTourRunning(true);
+    goToStep(next);
+    isHandlingSymbolRef.current = false;
 
-  const handleAnalyzeDone = () => {
-  console.log("handleAnalyzeDone called, waitingForAnalyzeRef:", waitingForAnalyzeRef.current);
+    const el = conceptTourSteps[next]?.ref?.current;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setAnchorEl(el);
+      setIsPopupVisible(true);
+    }
+    speakTourText(conceptTourSteps[next].text);
+    isHandlingSymbolRef.current = false;
+  });
+};
+
+const handleAnalyzeDone = () => {
   if (!waitingForAnalyzeRef.current) return;
   setIsAnalyzeDone(true);
   isAnalyzeDoneRef.current = true;
   waitingForAnalyzeRef.current = false;
   setWaitingForAnalyze(false);
+  setIsConceptTourRunning(true);
+
   const next = conceptStepRef.current + 1;
   setConceptStepSynced(next);
-  setIsPopupVisible(false);
+
   setTimeout(() => {
-    const el = freqTableRef.current;
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setTimeout(() => {
-        setAnchorEl(el);
-        setIsPopupVisible(true);
-      }, 400);
-    } else {
-      setIsPopupVisible(true);
-    }
-    speakTourText(conceptTourSteps[next].text);
-  }, 300);
+    goToStep(next);
+  }, 600);
 };
 
   const handleTextEntered = () => {
-    if (!waitingForSymbolRef.current) return;
-    if (resetAnimationRef.current) resetAnimationRef.current();
-    setWaitingForSymbol(false);
-    waitingForSymbolRef.current = false;
+  if (!waitingForSymbolRef.current) return;
+  if (resetAnimationRef.current) resetAnimationRef.current();
+  setWaitingForSymbol(false);
+  waitingForSymbolRef.current = false;
 
   const textEl = textInputBoxRef.current;
   if (textEl) {
-  textEl.style.outline = '3px solid #f59e0b';
-  textEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
-  textEl.style.borderRadius = '8px';
+    textEl.style.outline = '3px solid #f59e0b';
+    textEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+    textEl.style.borderRadius = '8px';
   }
-    setIsConceptTourRunning(false);
-    speakTourText("Text entered. Now click Analyze Frequency.", () => {
-      const next = conceptStepRef.current + 1;
-      setConceptStepSynced(next);
-      setWaitingForAnalyze(true);
-      waitingForAnalyzeRef.current = true;
-      setIsConceptTourRunning(true);
-      setAnchorEl(null);
-      setIsPopupVisible(false);
-      const el = conceptTourSteps[next]?.ref?.current;
-      if (el) setAnchorEl(el);
-      speakTourText(conceptTourSteps[next].text);
-    });
-  };
 
-  const goToStep = (stepIndex) => {
-    setConceptStepSynced(stepIndex);
+  speakTourText("Text entered. Now click Analyze Frequency.", () => {
+    const next = conceptStepRef.current + 1;
+    setWaitingForAnalyze(true);
+    waitingForAnalyzeRef.current = true;
+    setIsConceptTourRunning(true);
+    goToStep(next);
+  });
+};
+
+ const goToStep = (stepIndex) => {
+  setShowActionRequired(false);
+  setConceptStepSynced(stepIndex);
+  setTourWordIndex(-1);
+  window.speechSynthesis.cancel();
+
+  const trySetAnchor = (attempts = 0) => {
     const el = conceptTourSteps[stepIndex]?.ref?.current;
-    if (el) setAnchorEl(el);
-    speakTourText(conceptTourSteps[stepIndex].text);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setAnchorEl(el);
+      setIsPopupVisible(true);
+      speakTourText(conceptTourSteps[stepIndex].text);
+    } else if (attempts < 10) {
+      setTimeout(() => trySetAnchor(attempts + 1), 100);
+    }
   };
 
+  trySetAnchor();
+}; 
   const handleTutorToggle = () => {
   if (isSpeechEnabledRef.current) {
     window.speechSynthesis.cancel();
@@ -527,22 +528,11 @@ useEffect(() => {
           <button
             ref={guidedTutorRef}
             onClick={() => {
-            if (hasDeclinedRef.current || isConceptTourRunning) {
-            hasDeclinedRef.current = false;
             setShowWelcome(false);
+            window.speechSynthesis.cancel();
             setIsConceptTourRunning(true);
             setConceptStepSynced(0);
-            setTimeout(() => {
-                const el = conceptTourSteps[0].ref.current;
-                if (!el) return;
-                setAnchorEl(el);
-                setIsPopupVisible(true);
-                speakTourText(conceptTourSteps[0].text);
-            }, 500);
-            } else {
-              setShowWelcome(true);
-              setWelcomeAnchorEl(guidedTutorRef.current);
-            }
+            goToStep(0);
             }}
             style={{
               background: "white", 
@@ -597,9 +587,10 @@ useEffect(() => {
         borderLeft: '2px solid #1d2a6d',
         marginLeft: 'auto',
         marginRight: '20px',
-        marginBottom: '-8px',
-        zIndex: 0,
+        marginBottom: '-9px',
+        zIndex: 2,
         flexShrink: 0,
+        position: 'relative',
       }}/>
 
       <div style={{
@@ -610,7 +601,7 @@ useEffect(() => {
         boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
         border: '2px solid #1d2a6d',
         position: 'relative',
-        zIndex: 1,
+        zIndex: 0,
       }}>
         <div style={{
           textAlign: 'center',
@@ -713,37 +704,39 @@ useEffect(() => {
           {showActionRequired ? "⚠️ Action Required" : conceptTourSteps[conceptStep]?.title}
           </div>
 
-<div style={{ fontSize: '14px', color: '#333', lineHeight: '1.6', marginBottom: '18px' }}>
-  {showActionRequired ? (
-    "Please click the Generate button before proceeding."
-      .split(" ").map((word, i) => (
+        <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.6', marginBottom: '18px' }}>
+        {showActionRequired ? (
+        ((conceptTourSteps[conceptStep]?.requiresAnalyze || 
+        conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone
+        ? "Please click the Analyze Frequency button before proceeding."
+        : "Please click the Generate button before proceeding."
+        ).split(" ").map((word, i) => (
         <span key={i} style={{
-          padding: "1px 3px", marginRight: "3px", borderRadius: "4px", display: "inline-block",
-          background: i === tourWordIndex ? "#fff8e1" : "transparent",
-          color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
-          fontWeight: i === tourWordIndex ? "600" : "400",
-          borderBottom: i === tourWordIndex ? "2px solid #f59e0b" : "2px solid transparent",
-          transition: "all 0.15s ease",
-        }}>
-          {word}
-        </span>
-      ))
-  ) : (
-    conceptTourSteps[conceptStep]?.text.split(" ").map((word, i) => (
-      <span key={i} style={{
         padding: "1px 3px", marginRight: "3px", borderRadius: "4px", display: "inline-block",
         background: i === tourWordIndex ? "#fff8e1" : "transparent",
         color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
         fontWeight: i === tourWordIndex ? "600" : "400",
         borderBottom: i === tourWordIndex ? "2px solid #f59e0b" : "2px solid transparent",
         transition: "all 0.15s ease",
-      }}>
+        }}>
         {word}
-      </span>
-    ))
-  )}
-</div>
-
+        </span>
+        ))
+        ) : (
+        conceptTourSteps[conceptStep]?.text.split(" ").map((word, i) => (
+        <span key={i} style={{
+        padding: "1px 3px", marginRight: "3px", borderRadius: "4px", display: "inline-block",
+        background: i === tourWordIndex ? "#fff8e1" : "transparent",
+        color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
+        fontWeight: i === tourWordIndex ? "600" : "400",
+        borderBottom: i === tourWordIndex ? "2px solid #f59e0b" : "2px solid transparent",
+        transition: "all 0.15s ease",
+        }}>
+        {word}
+        </span>
+        ))
+        )}
+        </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={() => {
@@ -788,67 +781,64 @@ useEffect(() => {
                     fontWeight: '600', 
                     fontSize: '13px'
                   }}>Back</button>
-              </div>
-              <button
-                onClick={() => {
-                  const currentStepData = conceptTourSteps[conceptStep];
-                  if (currentStepData?.waitingForSymbol) {
-                    setWaitingForSymbol(true);
-                    waitingForSymbolRef.current = true;
-                    setAnchorEl(null);
-                    setIsPopupVisible(false);
-                    return;
-                  }
-                  if (currentStepData?.waitingForAnalyze) {
-                  waitingForAnalyzeRef.current = true;
-                  setIsConceptTourRunning(false);
-                  setAnchorEl(null);
-                  return;
-                  }
-                  if (currentStepData?.requiresGenerate && !isTreeGeneratedRef.current) {
-                    setShowActionRequired(true);
-                    speakTourText("Please click the Generate button before proceeding.");
-                    return;
-                  }
-                  if (currentStepData?.requiresAnalyze && !isAnalyzeDoneRef.current) {
-                  setShowActionRequired(true);
-                  speakTourText("Please click the Analyze Frequency button before proceeding.");
-                  return;
-                  }
-                  if (currentStepData?.waitingForAnalyze) {
-                  waitingForAnalyzeRef.current = true;
-                  setWaitingForAnalyze(true);
-                  setAnchorEl(null);
-                  setIsPopupVisible(false);
-                  return;
-                  }
-                  setShowActionRequired(false);
-                  if (conceptStep < conceptTourSteps.length - 1) {
-                    const next = conceptStep + 1;
-                    if (conceptTourSteps[next]?.waitingForAnalyze) {
-                      setWaitingForAnalyze(true);
-                      waitingForAnalyzeRef.current = true;
-                    }
-                    goToStep(next);
-                  } else {
-                    setIsConceptTourRunning(false);
-                    setConceptStepSynced(0);
-                    setAnchorEl(null);
-                    window.speechSynthesis.cancel();
-                  }
-                }}
-                style={{
-                  background: '#1d2a6d', 
-                  color: 'white', 
-                  border: 'none',
-                  padding: '8px 18px', 
-                  borderRadius: '10px',
-                  cursor: 'pointer', 
-                  fontWeight: '600', 
-                  fontSize: '13px'
-                }}>
-                {conceptStep === conceptTourSteps.length - 1 ? 'Finish' : 'Next'}
-              </button>
+                </div>
+                <button
+  onClick={() => {
+    const currentStepData = conceptTourSteps[conceptStep];
+    
+    if (currentStepData?.waitingForSymbol) {
+      setWaitingForSymbol(true);
+      waitingForSymbolRef.current = true;
+      setAnchorEl(null);
+      setIsPopupVisible(false);
+      return;
+    }
+
+    if ((currentStepData?.requiresAnalyze || currentStepData?.waitingForAnalyze) 
+        && !isAnalyzeDoneRef.current) {
+      setShowActionRequired(true);
+      speakTourText("Please click the Analyze Frequency button before proceeding.");
+      return;
+    }
+
+    if (currentStepData?.requiresGenerate && !isTreeGeneratedRef.current) {
+      setShowActionRequired(true);
+      speakTourText("Please click the Generate button before proceeding.");
+      return;
+    }
+
+    setShowActionRequired(false);
+
+    if (conceptStep < conceptTourSteps.length - 1) {
+      goToStep(conceptStep + 1);
+    } else {
+      setIsConceptTourRunning(false);
+      setConceptStepSynced(0);
+      setAnchorEl(null);
+      window.speechSynthesis.cancel();
+    }
+  }}
+  style={{
+    background: (
+      ((conceptTourSteps[conceptStep]?.requiresAnalyze || 
+        conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone) ||
+      (conceptTourSteps[conceptStep]?.requiresGenerate && !isTreeGenerated)
+    ) ? "#9ca3af" : "#1d2a6d",
+    color: "white",
+    border: "none",
+    padding: "8px 18px",
+    borderRadius: "10px",
+    cursor: (
+      ((conceptTourSteps[conceptStep]?.requiresAnalyze || 
+        conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone) ||
+      (conceptTourSteps[conceptStep]?.requiresGenerate && !isTreeGenerated)
+    ) ? "not-allowed" : "pointer",
+    fontWeight: "600",
+    fontSize: "13px"
+  }}>
+  {conceptStep === conceptTourSteps.length - 1 ? 'Finish' : 'Next'}
+</button>
+                
             </div>
 
             <div style={{ marginTop: '12px' }}>
