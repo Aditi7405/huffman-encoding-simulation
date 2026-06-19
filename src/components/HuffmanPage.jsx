@@ -357,23 +357,35 @@ export default function HuffmanPage() {
   const [openRunLengthModal, setOpenRunLengthModal] = useState(false);
   const [openHuffmanModal, setOpenHuffmanModal] = useState(false);
 
-  const [drawerOpen, setDrawerOpen] = useState(false); // State for opening/closing the drawer
+  const [drawerOpen, setDrawerOpen] =
+   useState(false); 
 
   var indexTabValue = tabValue;
 
   const instr = () => {
-    
-    isTutorCancelledRef.current = true;
-    speechSynthesis.cancel();
-    if (stepIndexRef.current > 0) stepIndexRef.current -= 1;
-    wasTutorActiveRef.current = isTutorEnabled || isTutorPlaying || tutorPaused;
+  const wasTourActive = isTourPlaying || tourStep >= 0;
+  savedTourStepRef.current = tourStep;
+  wasTourActiveRef.current = wasTourActive;  
+  const savedTourStep = tourStep;
+  
+  if (wasTourActive) {
+    window.speechSynthesis.cancel();
+    wordTimersRef.current.forEach(t => clearTimeout(t));
+    wordTimersRef.current = [];
+    setIsTourPlaying(false);
+    setAnchorEl(null);
+  }
+  isTutorCancelledRef.current = true;
+  speechSynthesis.cancel();
+  if (stepIndexRef.current > 0) stepIndexRef.current -= 1;
+  wasTutorActiveRef.current = isTutorEnabled || isTutorPlaying || tutorPaused || wasTourActive;
 
-    setIsTutorPlaying(false);
-    setTutorPaused(true);
-    setCurrentTutorStep(-1);
-    setInstructionStep(0);
-    setOpenInstructionsModal(true);
-  };
+  setIsTutorPlaying(false);
+  setTutorPaused(true);
+  setCurrentTutorStep(-1);
+  setInstructionStep(0);
+  setOpenInstructionsModal(true);
+};
 
   const exp2 = () => {
     setOpenHuffmanModal(true);
@@ -407,7 +419,7 @@ export default function HuffmanPage() {
       });
 
       // Find the index of the new image in the updated images array
-      const foundIndex = images.length; // Since it's being added at the end of the array
+      const foundIndex = images.length; 
       setSelectedImage(foundIndex);
     }
   };
@@ -433,19 +445,26 @@ export default function HuffmanPage() {
   };
 
   const handleCloseModal = () => {
-    speechSynthesis.cancel();
-    setOpenInstructionsModal(false); // Close the modal
-    setInstructionStep(-1);
+  speechSynthesis.cancel();
+  setOpenInstructionsModal(false);
+  setInstructionStep(-1);
 
-    if (wasTutorActiveRef.current) {
-      setTimeout(() => {
-        isTutorCancelledRef.current=false;
-        setIsTutorEnabled(true);
-        setTutorPaused(false);
-        setIsTutorPlaying(true);
-      }, 200);
-    }
-  };
+  if (savedTourStepRef.current >= 0) {
+    setTimeout(() => {
+      isTourCancelledRef.current = false;
+      isTourPlayingRef.current = true;
+      goToStep(savedTourStepRef.current);
+      savedTourStepRef.current = -1;
+    }, 200);
+  } else if (wasTutorActiveRef.current) {
+    setTimeout(() => {
+      isTutorCancelledRef.current = false;
+      setIsTutorEnabled(true);
+      setTutorPaused(false);
+      setIsTutorPlaying(true);
+    }, 200);
+  }
+};
 
   const handleClose3Modal = () => {
     setOpenHuffmanModal(false); // Close the modal
@@ -548,7 +567,9 @@ export default function HuffmanPage() {
   const isTourPlayingRef = useRef(false);
   const wordTimersRef = useRef([]);
   const speechAnchorRef = useRef(null);
+  const wasTourActiveRef = useRef(false);
   const tourWordIndexRef = useRef(-1);
+  const savedTourStepRef = useRef(-1);
 
 const startGuidedTutor = () => {
   setShowTutorPrompt(false);
@@ -592,7 +613,7 @@ const speakStep = () => {
 
   if (step.ref?.current) {
     step.ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
+  }cd
 
   
   setTimeout(() => {

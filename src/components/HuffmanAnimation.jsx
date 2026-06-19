@@ -40,7 +40,9 @@ export default function HuffmanAnimation({
     symbolTextToggleRef, analyzeFreqRef, freqTableRef, generateBtnRef, 
   nextStepBtnRef, prevStepBtnRef, resetBtnRef, treeVisualizationRef,
   onSymbolSelected, onAnalyzeDone, onTextEntered, onRegisterReset,
-  symbolBoxRef,textInputBoxRef, onGenerate, onReset,
+  symbolBoxRef,textInputBoxRef, onGenerate, onReset, treeDescriptionRef,
+  encodedTableRef,onStepsGenerated, onNextStepDone, onTreeComplete,
+  onNewInput,
 }) {
     const [image,setImage]=useState(0);
     const [original,setOriginal]=useState(null);
@@ -258,16 +260,18 @@ export default function HuffmanAnimation({
       setEncodedText(finalEncoded);
       setTreeReady(true);
       setIsComplete(false);
+      if (onStepsGenerated) onStepsGenerated(steps.length);
     }
 
     function handleNextStep(){
         if(currentStep >= steps.length - 1){
             setIsComplete(true);
+            if(onTreeComplete) onTreeComplete();
             return;
         }
         const next = currentStep + 1;
         setCurrentStep(next);
-
+        if (onNextStepDone) onNextStepDone(next, steps.length);
         const step = steps[next];
 
         if(step.type === "select"){
@@ -351,6 +355,8 @@ export default function HuffmanAnimation({
     }
 
     function handleImage(x){
+    console.log('handleImage called, onNewInput exists:', !!onNewInput);
+      if (onNewInput) onNewInput();
       setCurrentStep(-1);
       setTree(null);
       setShowInitialNodes(false);
@@ -509,6 +515,7 @@ export default function HuffmanAnimation({
     value={tdata}
     onChange={(e) => { 
         const newVal = e.target.value;
+        if (newVal.length === 1 && onNewInput) onNewInput();
         setTdata(e.target.value);
         setTdata(newVal);
         setCurrentStep(-1);
@@ -522,7 +529,7 @@ export default function HuffmanAnimation({
         setOriginal(null);
         setImage(0);
         
-    if (e.target.value.length > 0 && onTextEntered) {
+    if (newVal.length === 1 && onTextEntered) {
     onTextEntered();
     }
     }}
@@ -771,10 +778,10 @@ export default function HuffmanAnimation({
         </div>
 
         {current && (
-            <div className="merge-visual"></div>
+            <div className="merge-visual" ></div>
         )}
-
-        <div className="tree-space">
+        <div >
+        <div className="tree-space" ref={treeDescriptionRef} >
         {showInitialNodes && currentStep === -1 && (
         <div className="step-explanation">
         <p>
@@ -825,14 +832,15 @@ export default function HuffmanAnimation({
                 The path from root to any leaf gives that character's Huffman code.
             </p>
             </div>
+            
         )}
         </>
         )}
         </div>
-
+</div>
         {isComplete && encodedTable.length > 0 && (
         <>  
-        <div className="step-explanation final-box">
+         <div className="step-explanation final-box" ref={encodedTableRef}>
             <p>
                 <b>:  </b>Tree fully generated. Each character has now been assigned an optimal binary code
                 based on its frequency. More frequent characters have shorter codes.
@@ -840,9 +848,9 @@ export default function HuffmanAnimation({
                 <b>You can now see the final encoded output.</b>
                 </p>
             </p>
-        </div>
         
-        <div className='panel encoded-panel'>
+        
+        <div className='panel encoded-panel' >
             <h2>Encoded Table</h2>
             <table className="frequency-table">
                 <tbody>
@@ -861,8 +869,10 @@ export default function HuffmanAnimation({
                 </tbody>
             </table>
         </div>
+        </div>
+        
         </>
-        )}       
+        )}      
     </div>
 </div>
 </div>

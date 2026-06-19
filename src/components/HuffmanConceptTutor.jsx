@@ -76,6 +76,13 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   const [showActionRequired, setShowActionRequired] = useState(false);
   const [isAnalyzeDone, setIsAnalyzeDone] = useState(false);
   const [isSpeechEnabled, setIsSpeechEnabled] = useState(true);
+  const [totalMerges, setTotalMerges] = useState(0);
+  const [currentMerge, setCurrentMerge] = useState(0);
+  const [treeCompleted, setTreeCompleted] = useState(false);
+  const [showTreeComplete, setShowTreeComplete] = useState(false);
+  const [instructionsWodIndex, setInstructionsWordIndex] = useState(-1);
+  const [activeInstructionStep, setActiveInstructionStep] = useState(-1);
+  const [treeCompleteMessage, setTreeCompleteMessage] = useState('');
 
   const guidedTutorRef = useRef(null);
   const instructionBtnRef = useRef(null);
@@ -101,11 +108,61 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   const isSpeechEnabledRef = useRef(true);
   const hasDeclinedRef = useRef(false);
   const isHandlingSymbolRef = useRef(false);
+  const treeDescriptionRef = useRef(null);
+  const encodedTableRef = useRef(null);
+  const treeCompletedRef = useRef(false);
+  const totalMergesRef = useRef(0);
+  const isConceptTourRunningRef = useRef(false); 
 
   const setConceptStepSynced = (val) => {
     conceptStepRef.current = val;
     setConceptStep(val);
   };
+
+  
+  const setTourRunning = (val) => {
+    isConceptTourRunningRef.current = val;
+    setIsConceptTourRunning(val);
+  };
+
+  const cancelTour = () => {
+    setTourRunning(false);
+    setIsPopupVisible(false);
+    setAnchorEl(null);
+    window.speechSynthesis.cancel();
+    if (wordTimersRef.current) {
+      wordTimersRef.current.forEach(t => clearTimeout(t));
+      wordTimersRef.current = [];
+    }
+    setTourWordIndex(-1);
+    setIsHuffmanSpeaking(false);
+    setConceptStepSynced(0);
+    conceptTourSteps.forEach(step => {
+      const el = step.ref?.current;
+      if (el) {
+        el.style.outline = '';
+        el.style.boxShadow = '';
+        el.style.borderRadius = '';
+      }
+    });
+  };
+
+  const restartFromInput = () => {
+  setIsAnalyzeDone(false);
+  isAnalyzeDoneRef.current = false;
+  setIsTreeGenerated(false);
+  isTreeGeneratedRef.current = false;
+  setTreeCompleted(false);
+  treeCompletedRef.current = false;
+  setWaitingForAnalyze(false);
+  waitingForAnalyzeRef.current = false;
+  window.speechSynthesis.cancel();
+  
+  setTourRunning(true);
+  setTimeout(() => {
+    goToStep(3); 
+  }, 300);
+};
 
   const conceptTourSteps = [
     {
@@ -131,6 +188,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
       text: "Choose your input mode — select a mathematical symbol such as Plus, Minus, Multiply, or Divide, or switch to Text Input mode and enter any custom string to begin encoding.",
       ref: symbolTextToggleRef,
       waitingForSymbol: true,
+      placement: "left-start",
     },
     {
       title: "Analyze Frequency",
@@ -159,19 +217,33 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
       title: "Next Step",
       text: "Press Next Step to advance the tree construction. The two nodes with the lowest frequencies are highlighted and merged iteratively until a single root node remains — this is the core of Huffman's greedy algorithm.",
       ref: nextStepBtnRef,
-      placement: "left-start",   
-    },
-    {
-      title: "Tree Visualization Box",
-      text: "This panel renders the Huffman Tree in real time. Observe how nodes combine step by step, with edge labels 0 and 1 representing the binary path from root to each character.You can see the full description below the tree visualization area.",
-      ref: treeVisualizationRef,
-      placement: "left",
+      placement: "top-start",
+      requiresTreeComplete: true,
     },
     {
       title: "Prev Step",
       text: "Use Prev Step to navigate backwards through the tree construction process — useful for reviewing any merging step in detail.",
       ref: prevStepBtnRef,
+      placement: "top-start",
+    },
+    {
+      title: "Tree Visualization Box",
+      text: "This panel renders the Huffman Tree in real time. Observe how nodes combine step by step, with edge labels 0 and 1 representing the binary path from root to each character. You can see the full description below the tree visualization area.",
+      ref: treeVisualizationRef,
+      placement: "left",
+    },
+    {
+      title: "Tree Description",
+      text: "Below the tree visualization, you can read a step-by-step description of what is happening - which nodes are being selected, merged, and how the edge labels 0 and 1 form the binary path from root to each leaf character.",
+      ref: treeDescriptionRef,
       placement: "left-start",
+    },
+    {
+      title: "Encoded Table",
+      text: "Once the tree is fully built, the Encoded Table appears here showing each character alongside its optimal Huffman binary code. Characters with higher frequency receive shorter codes — this is the core compression benefit of Huffman Encoding.",
+      ref: encodedTableRef,
+      placement: "top",
+      requiresGenerate: true,
     },
     {
       title: "Reset",
@@ -195,11 +267,11 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   }, [isConceptTourRunning]);
 
   useEffect(() => {
-  if (!isConceptTourRunning) return;
-  const el = conceptTourSteps[conceptStep]?.ref?.current;
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
+    if (!isConceptTourRunning) return;
+    const el = conceptTourSteps[conceptStep]?.ref?.current;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   }, [conceptStep, isConceptTourRunning]);
 
   useEffect(() => {
@@ -212,9 +284,10 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
         setWelcomeAnchorEl(el);
       }, 800);
     } else {
+
       setShowWelcome(false);
       setWelcomeAnchorEl(null);
-      setIsConceptTourRunning(false);
+      setTourRunning(false); 
       setAnchorEl(null);
       hasDeclinedRef.current = false;
     }
@@ -234,9 +307,21 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   useEffect(() => {
     const symbolEl = symbolBoxRef.current;
     const textEl = textInputBoxRef.current;
-    if (symbolEl) { symbolEl.style.outline= ''; symbolEl.style.boxShadow = ''; symbolEl.style.borderRadius = '';}
-    if (textEl) {textEl.style.outline = ''; textEl.style.boxShadow = '';symbolEl.style.borderRadius = ''; }
-  if (!isConceptTourRunning) {
+    if (symbolEl) { symbolEl.style.outline = ''; symbolEl.style.boxShadow = ''; symbolEl.style.borderRadius = ''; }
+    if (textEl) { textEl.style.outline = ''; textEl.style.boxShadow = ''; textEl.style.borderRadius = ''; }
+
+    if (!isConceptTourRunning) {
+      conceptTourSteps.forEach(step => {
+        const el = step.ref?.current;
+        if (el) {
+          el.style.outline = '';
+          el.style.boxShadow = '';
+          el.style.borderRadius = '';
+        }
+      });
+      return;
+    }
+
     conceptTourSteps.forEach(step => {
       const el = step.ref?.current;
       if (el) {
@@ -245,36 +330,25 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
         el.style.borderRadius = '';
       }
     });
-    return;
-  }
 
-  conceptTourSteps.forEach(step => {
-    const el = step.ref?.current;
+    const el = conceptTourSteps[conceptStep]?.ref?.current;
     if (el) {
-      el.style.outline = '';
-      el.style.boxShadow = '';
-      el.style.borderRadius = '';
+      el.style.outline = '3px solid #f59e0b';
+      el.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+      el.style.borderRadius = '8px';
+      el.style.transition = 'all 0.3s ease';
     }
-  });
+  }, [conceptStep, isConceptTourRunning]);
 
-  const el = conceptTourSteps[conceptStep]?.ref?.current;
-  if (el) {
-    el.style.outline = '3px solid #f59e0b';
-    el.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
-    el.style.borderRadius = '8px';
-    el.style.transition = 'all 0.3s ease';
-  }
-}, [conceptStep, isConceptTourRunning]);
-
-useEffect(() => {
-  if(!isConceptTourRunning) return;
-  const pl = conceptTourSteps[conceptStep]?.placement || 'bottom-start';
-  currentPlacementRef.current = pl;
-}, [conceptStep, isConceptTourRunning]);
+  useEffect(() => {
+    if (!isConceptTourRunning) return;
+    const pl = conceptTourSteps[conceptStep]?.placement || 'bottom-start';
+    currentPlacementRef.current = pl;
+  }, [conceptStep, isConceptTourRunning]);
 
   const speakTourText = (text, onDone) => {
-    if(!isSpeechEnabledRef.current){
-      if(onDone) onDone();
+    if (!isSpeechEnabledRef.current) {
+      if (onDone) onDone();
       return;
     }
     window.speechSynthesis.cancel();
@@ -286,11 +360,7 @@ useEffect(() => {
 
     const doSpeak = (voices) => {
       const utterance = new SpeechSynthesisUtterance(text);
-      const preferred = voices.find(v => v.lang.startsWith('en')) || voices[0];
-      if (preferred) utterance.voice = preferred;
-      utterance.rate = 0.95;
-      utterance.pitch = 1;
-      utterance.volume = 1;
+      if (voices.length > 0) utterance.voice = voices[0];
 
       const words = text.split(' ');
 
@@ -323,6 +393,7 @@ useEffect(() => {
 
       window.speechSynthesis.speak(utterance);
     };
+
     setTimeout(() => {
       const voices = window.speechSynthesis.getVoices();
       if (voices.length > 0) {
@@ -336,118 +407,172 @@ useEffect(() => {
     }, 150);
   };
 
-const handleSymbolSelected = (index) => {
-  if (!waitingForSymbolRef.current) return;
-  if (isHandlingSymbolRef.current) return;
-  isHandlingSymbolRef.current = true;
-
-  if (resetAnimationRef.current) resetAnimationRef.current();
-  setWaitingForSymbol(false);
-  waitingForSymbolRef.current = false;
-
-  const symbolEl = symbolBoxRef.current;
-  if (symbolEl) {
-    symbolEl.style.outline = '3px solid #f59e0b';
-    symbolEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
-    symbolEl.style.borderRadius = '8px';
-  }
-
-  const name = symbolNames[index];
-  speakTourText(`You selected ${name}.`, () => {
-    const next = conceptStepRef.current + 1;
-   // setConceptStepSynced(next);
-    setWaitingForAnalyze(true);
-    waitingForAnalyzeRef.current = true;
-    setIsConceptTourRunning(true);
-    goToStep(next);
-    isHandlingSymbolRef.current = false;
-
-    const el = conceptTourSteps[next]?.ref?.current;
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setAnchorEl(el);
-      setIsPopupVisible(true);
+  const handleSymbolSelected = (index) => {
+    if (!waitingForSymbolRef.current) {
+      
+      if (isConceptTourRunningRef.current) {
+        restartFromInput();
+      }
+      return;
     }
-    speakTourText(conceptTourSteps[next].text);
-    isHandlingSymbolRef.current = false;
-  });
-};
 
-const handleAnalyzeDone = () => {
-  if (!waitingForAnalyzeRef.current) return;
-  setIsAnalyzeDone(true);
-  isAnalyzeDoneRef.current = true;
-  waitingForAnalyzeRef.current = false;
-  setWaitingForAnalyze(false);
-  setIsConceptTourRunning(true);
+    if (isHandlingSymbolRef.current) return;
+    isHandlingSymbolRef.current = true;
 
-  const next = conceptStepRef.current + 1;
-  setConceptStepSynced(next);
+    setWaitingForSymbol(false);
+    waitingForSymbolRef.current = false;
 
-  setTimeout(() => {
-    goToStep(next);
-  }, 600);
-};
-
-  const handleTextEntered = () => {
-  if (!waitingForSymbolRef.current) return;
-  if (resetAnimationRef.current) resetAnimationRef.current();
-  setWaitingForSymbol(false);
-  waitingForSymbolRef.current = false;
-
-  const textEl = textInputBoxRef.current;
-  if (textEl) {
-    textEl.style.outline = '3px solid #f59e0b';
-    textEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
-    textEl.style.borderRadius = '8px';
-  }
-
-  speakTourText("Text entered. Now click Analyze Frequency.", () => {
-    const next = conceptStepRef.current + 1;
-    setWaitingForAnalyze(true);
-    waitingForAnalyzeRef.current = true;
-    setIsConceptTourRunning(true);
-    goToStep(next);
-  });
-};
-
- const goToStep = (stepIndex) => {
-  setShowActionRequired(false);
-  setConceptStepSynced(stepIndex);
-  setTourWordIndex(-1);
-  window.speechSynthesis.cancel();
-
-  const trySetAnchor = (attempts = 0) => {
-    const el = conceptTourSteps[stepIndex]?.ref?.current;
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setAnchorEl(el);
-      setIsPopupVisible(true);
-      speakTourText(conceptTourSteps[stepIndex].text);
-    } else if (attempts < 10) {
-      setTimeout(() => trySetAnchor(attempts + 1), 100);
+    const symbolEl = symbolBoxRef.current;
+    if (symbolEl) {
+      symbolEl.style.outline = '3px solid #f59e0b';
+      symbolEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+      symbolEl.style.borderRadius = '8px';
     }
+
+    const name = symbolNames[index];
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(`You selected ${name}.`);
+    utterance.rate = 0.95;
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) utterance.voice = voices[0];
+
+    utterance.onend = () => {
+      const next = conceptStepRef.current + 1;
+      setWaitingForAnalyze(true);
+      waitingForAnalyzeRef.current = true;
+      setTourRunning(true);
+      goToStep(next);
+      setTimeout(() => {
+        const toggleEl = symbolTextToggleRef.current;
+        if (toggleEl) {
+          toggleEl.style.outline = '';
+          toggleEl.style.boxShadow = '';
+          toggleEl.style.borderRadius = '';
+        }
+        const sEl = symbolBoxRef.current;
+        if (sEl) {
+          sEl.style.outline = '3px solid #f59e0b';
+          sEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+          sEl.style.borderRadius = '8px';
+        }
+        isHandlingSymbolRef.current = false;
+      }, 300);
+    };
+    window.speechSynthesis.speak(utterance);
   };
 
-  trySetAnchor();
-}; 
-  const handleTutorToggle = () => {
-  if (isSpeechEnabledRef.current) {
-    window.speechSynthesis.cancel();
-    wordTimersRef.current.forEach(t => clearTimeout(t));
-    wordTimersRef.current = [];
-    setTourWordIndex(-1);
-    setIsHuffmanSpeaking(false);
-    isSpeechEnabledRef.current = false;
-    setIsSpeechEnabled(false);
-  } else {
-    isSpeechEnabledRef.current = true;
-    setIsSpeechEnabled(true);
-    if (isConceptTourRunning && conceptTourSteps[conceptStep]) {
-      speakTourText(conceptTourSteps[conceptStep].text);
+  const handleAnalyzeDone = () => {
+    if (!waitingForAnalyzeRef.current) return;
+    setIsAnalyzeDone(true);
+    isAnalyzeDoneRef.current = true;
+    waitingForAnalyzeRef.current = false;
+    setWaitingForAnalyze(false);
+    setTourRunning(true); 
+
+    const next = conceptStepRef.current + 1;
+    setConceptStepSynced(next);
+
+    setTimeout(() => {
+      goToStep(next);
+    }, 600);
+  };
+
+  const handleStepsGenerated = (count) => {
+    setTotalMerges(count);
+    totalMergesRef.current = count;
+    setCurrentMerge(0);
+    setTreeCompleted(false);
+    treeCompletedRef.current = false;
+  };
+
+  const handleNextStepDone = (currentIdx, total) => {
+    const mergesDone = Math.floor((currentIdx + 1) / 2);
+    setCurrentMerge(mergesDone);
+  };
+
+  const handleTreeComplete = () => {
+    setTreeCompleted(true);
+    treeCompletedRef.current = true;
+    const msg = "Excellent! The Huffman Tree is now complete. All characters have been merged into a single root node. Click Next to continue.";
+    setTreeCompleteMessage(msg);
+    speakTourText(msg);
+  };
+
+  const handleTextEntered = () => {
+    if (!waitingForSymbolRef.current) {
+      if (isConceptTourRunningRef.current) {
+        restartFromInput();
+      }
+      return;
     }
-  }
-};
+
+    if (resetAnimationRef.current) resetAnimationRef.current();
+    setWaitingForSymbol(false);
+    waitingForSymbolRef.current = false;
+
+    const textEl = textInputBoxRef.current;
+    if (textEl) {
+      textEl.style.outline = '3px solid #f59e0b';
+      textEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+      textEl.style.borderRadius = '8px';
+    }
+
+    speakTourText("Text entered. Now click Analyze Frequency.", () => {
+      const next = conceptStepRef.current + 1;
+      setWaitingForAnalyze(true);
+      waitingForAnalyzeRef.current = true;
+      setTourRunning(true); 
+      goToStep(next);
+    });
+  };
+
+  const goToStep = (stepIndex) => {
+    setShowActionRequired(false);
+    setConceptStepSynced(stepIndex);
+    setTourWordIndex(-1);
+    window.speechSynthesis.cancel();
+
+    if (conceptTourSteps[stepIndex]?.waitingForSymbol) {
+      setWaitingForSymbol(true);
+      waitingForSymbolRef.current = true;
+      isHandlingSymbolRef.current = false;
+    } else {
+      setWaitingForSymbol(false);
+      waitingForSymbolRef.current = false;
+    }
+
+    const trySetAnchor = (attempts = 0) => {
+      const el = conceptTourSteps[stepIndex]?.ref?.current;
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setAnchorEl(el);
+        setIsPopupVisible(true);
+        speakTourText(conceptTourSteps[stepIndex].text);
+      } else if (attempts < 10) {
+        setTimeout(() => trySetAnchor(attempts + 1), 100);
+      }
+    };
+
+    trySetAnchor();
+  };
+
+  const handleTutorToggle = () => {
+    if (isSpeechEnabledRef.current) {
+      window.speechSynthesis.cancel();
+      wordTimersRef.current.forEach(t => clearTimeout(t));
+      wordTimersRef.current = [];
+      setTourWordIndex(-1);
+      setIsHuffmanSpeaking(false);
+      isSpeechEnabledRef.current = false;
+      setIsSpeechEnabled(false);
+    } else {
+      isSpeechEnabledRef.current = true;
+      setIsSpeechEnabled(true);
+      if (isConceptTourRunning && conceptTourSteps[conceptStep]) {
+        speakTourText(conceptTourSteps[conceptStep].text);
+      }
+    }
+  };
 
   return (
     <Dialog
@@ -470,56 +595,60 @@ const handleAnalyzeDone = () => {
 
         <div style={{ position: 'relative', display: "flex", alignItems: "center", gap: '10px' }}>
 
-        {/* Speech Button */}
-<span ref={speechBtnRef} style={{ display: "inline-flex", alignItems: "center" }}>
-  <Button title="Play"
-    onClick={handleTutorToggle}
-    style={{ display: isConceptTourRunning ? "none" : "inline-flex",
-    minWidth: "unset", padding: "0px" }}>
-    <img src={voice} alt="voice" style={{ width: "40px", height: "auto" }} />
-  </Button>
-
-  <Button title="Pause"
-    onClick={handleTutorToggle}
-    style={{ display: isConceptTourRunning ? "inline-flex" : "none",
-    minWidth: "unset", padding: "0px" }}>
-    <img src={voice_pause} alt="voice_pause" style={{ width: "40px", height: "auto" }} />
-  </Button>
-</span>
+          {/* Speech Button */}
+          <span ref={speechBtnRef} style={{ display: "inline-flex", alignItems: "center" }}>
+            <Button title="Play"
+              onClick={handleTutorToggle}
+              style={{ display: isConceptTourRunning ? "none" : "inline-flex", minWidth: "unset", padding: "0px" }}>
+              <img src={voice} alt="voice" style={{ width: "40px", height: "auto" }} />
+            </Button>
+            <Button title="Pause"
+              onClick={handleTutorToggle}
+              style={{ display: isConceptTourRunning ? "inline-flex" : "none", minWidth: "unset", padding: "0px" }}>
+              <img src={voice_pause} alt="voice_pause" style={{ width: "40px", height: "auto" }} />
+            </Button>
+          </span>
 
           <button
             ref={instructionBtnRef}
             onClick={() => {
               window.speechSynthesis.cancel();
               setShowInstructions(true);
+              const steps = [
+                " Select a symbol image from Choose box or type your own text. ",
+                " Click Analyze Frequency button. ",
+                " Click Generate button. ",
+                " Click Next Step repeatedly. ",
+                " Final binary codes will be displayed. ",
+                " Click Reset to start over."
+              ];
+              let index = 0;
+
+              const speakNext = () => {
+                if (index >= steps.length) { setActiveInstructionStep(-1); return; }
+                setActiveInstructionStep(index);
+                const u = new SpeechSynthesisUtterance(`Step ${index + 1}. ${steps[index]}`);
+                u.rate = 0.95;
+                const voices = window.speechSynthesis.getVoices();
+                if (voices.length > 0) u.voice = voices[0];
+                u.onend = () => { index += 1; speakNext(); };
+                window.speechSynthesis.speak(u);
+              };
+
               setTimeout(() => {
-              const u = new SpeechSynthesisUtterance(
-                "Instructions of Huffman Encoding"+
-                "Step 1: Select a symbol image or type your own text. " +
-                "Step 2: Click Analyze Frequency button. " +
-                "Step 3: Click Generate button. " +
-                "Step 4: Click Next Step repeatedly. " +
-                "Step 5: Final binary codes will be displayed. " +
-                "Step 6: Click Reset to start over."
-              );
-              u.rate = 0.95;
-              window.speechSynthesis.speak(u);
+                const intro = new SpeechSynthesisUtterance("Instructions of Huffman Encoding.");
+                intro.rate = 0.95;
+                const voices = window.speechSynthesis.getVoices();
+                if (voices.length > 0) intro.voice = voices[0];
+                intro.onend = speakNext;
+                window.speechSynthesis.speak(intro);
               }, 300);
             }}
             style={{
-              background: "white", 
-              color: "#1d2a6d", 
-              fontWeight: 600,
-              padding: "8px 18px", 
-              borderRadius: "13px", 
-              cursor: "pointer",
-              whiteSpace: "nowrap", 
-              fontSize: "14px",
-              width: "145px", 
-              height: "42px",
-              display: "flex", 
-              alignItems: "center", 
-              justifyContent: "center",
+              background: "white", color: "#1d2a6d", fontWeight: 600,
+              padding: "8px 18px", borderRadius: "13px", cursor: "pointer",
+              whiteSpace: "nowrap", fontSize: "14px", width: "145px", height: "42px",
+              display: "flex", alignItems: "center", justifyContent: "center",
               border: "1px solid #333",
             }}>
             INSTRUCTIONS
@@ -528,26 +657,17 @@ const handleAnalyzeDone = () => {
           <button
             ref={guidedTutorRef}
             onClick={() => {
-            setShowWelcome(false);
-            window.speechSynthesis.cancel();
-            setIsConceptTourRunning(true);
-            setConceptStepSynced(0);
-            goToStep(0);
+              setShowWelcome(false);
+              window.speechSynthesis.cancel();
+              setTourRunning(true); 
+              setConceptStepSynced(0);
+              goToStep(0);
             }}
             style={{
-              background: "white", 
-              color: "#1d2a6d", 
-              border: "1.5px solid #1d2a6d",
-              borderRadius: "6px", 
-              padding: "5px 14px", 
-              cursor: "pointer",
-              fontSize: "13px", 
-              fontWeight: 600, 
-              display: "flex", 
-              alignItems: "center",
-              gap: "8px", 
-              whiteSpace: "nowrap", 
-              height: "42px"
+              background: "white", color: "#1d2a6d", border: "1.5px solid #1d2a6d",
+              borderRadius: "6px", padding: "5px 14px", cursor: "pointer",
+              fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center",
+              gap: "8px", whiteSpace: "nowrap", height: "42px"
             }}>
             <b>Guided Tutor</b>
           </button>
@@ -555,7 +675,7 @@ const handleAnalyzeDone = () => {
           <button onClick={() => {
             window.speechSynthesis.cancel();
             setIsHuffmanSpeaking(false);
-            setIsConceptTourRunning(false);
+            setTourRunning(false);
             onClose();
           }}
             style={{
@@ -567,101 +687,85 @@ const handleAnalyzeDone = () => {
           </button>
         </div>
 
-  {/* Welcome Popup */}
-  {showWelcome && welcomeAnchorEl && (
-  <Popper
-    open={Boolean(welcomeAnchorEl)}
-    anchorEl={welcomeAnchorEl}
-    placement="bottom-end"
-    style={{ zIndex: 99999 }}
-    modifiers={[{ name: 'offset', options: { offset: [0, 10] } }]}>
-    
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {/* Arrow */}
-      <div style={{
-        width: '16px',
-        height: '16px',
-        background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
-        transform: 'rotate(45deg)',
-        borderTop: '2px solid #1d2a6d',
-        borderLeft: '2px solid #1d2a6d',
-        marginLeft: 'auto',
-        marginRight: '20px',
-        marginBottom: '-9px',
-        zIndex: 2,
-        flexShrink: 0,
-        position: 'relative',
-      }}/>
+        {/* Welcome Popup */}
+        {showWelcome && welcomeAnchorEl && (
+          <Popper
+            open={Boolean(welcomeAnchorEl)}
+            anchorEl={welcomeAnchorEl}
+            placement="bottom-end"
+            style={{ zIndex: 99999 }}
+            modifiers={[{ name: 'offset', options: { offset: [0, 10] } }]}>
 
-      <div style={{
-        width: '320px',
-        background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
-        borderRadius: '12px',
-        padding: '16px',
-        boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-        border: '2px solid #1d2a6d',
-        position: 'relative',
-        zIndex: 0,
-      }}>
-        <div style={{
-          textAlign: 'center',
-          fontSize: '16px',
-          fontWeight: '700',
-          color: '#1d2a6d',
-          marginBottom: '12px',
-          borderBottom: '1px solid #cbd5e1',
-          paddingBottom: '8px',
-        }}>
-          Guided Tutor is here to help!
-        </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{
+                width: '16px', height: '16px',
+                background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
+                transform: 'rotate(45deg)', borderTop: '2px solid #1d2a6d',
+                borderLeft: '2px solid #1d2a6d', marginLeft: 'auto', marginRight: '20px',
+                marginBottom: '-9px', zIndex: 2, flexShrink: 0, position: 'relative',
+              }} />
 
-        <p style={{ fontSize: '14px', color: '#444', marginBottom: '18px', lineHeight: '1.5' }}>
-          Welcome. Do you want Guided Tutor to give you a proper guide on how to run the simulator?
-        </p>
+              <div style={{
+                width: '320px',
+                background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
+                borderRadius: '12px', padding: '16px',
+                boxShadow: '0 8px 25px rgba(0,0,0,0.15)', border: '2px solid #1d2a6d',
+                position: 'relative', zIndex: 0,
+              }}>
+                <div style={{
+                  textAlign: 'center', fontSize: '16px', fontWeight: '700',
+                  color: '#1d2a6d', marginBottom: '12px',
+                  borderBottom: '1px solid #cbd5e1', paddingBottom: '8px',
+                }}>
+                  Guided Tutor is here to help!
+                </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-          <button onClick={() => {
-            hasDeclinedRef.current = true;
-            setShowWelcome(false)}}
-            style={{
-              background: '#f3f4f6', color: '#1d2a6d',
-              border: '1px solid #1d2a6d', padding: '8px 20px',
-              borderRadius: '8px', cursor: 'pointer',
-              fontWeight: '600', fontSize: '14px',
-            }}>
-            No, Thanks
-          </button>
+                <p style={{ fontSize: '14px', color: '#444', marginBottom: '18px', lineHeight: '1.5' }}>
+                  Welcome. Do you want Guided Tutor to give you a proper guide on how to run the simulator?
+                </p>
 
-          <button onClick={() => {
-            setShowWelcome(false);
-            setIsConceptTourRunning(true);
-            setConceptStepSynced(0);
-            setTimeout(() => {
-              const el = conceptTourSteps[0].ref.current;
-              if (!el) return;
-              setAnchorEl(el);
-              setIsPopupVisible(true);
-              speakTourText(conceptTourSteps[0].text);
-            }, 500);
-          }}
-            style={{
-              background: '#1d2a6d', color: 'white',
-              border: 'none', padding: '8px 20px',
-              borderRadius: '8px', cursor: 'pointer',
-              fontWeight: '600', fontSize: '14px',
-            }}>
-            Yes, Please
-          </button>
-        </div>
-      </div>
-    </div>
-  </Popper>
-)}
-</DialogTitle>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                  <button onClick={() => {
+                    hasDeclinedRef.current = true;
+                    setShowWelcome(false);
+                  }}
+                    style={{
+                      background: '#f3f4f6', color: '#1d2a6d', border: '1px solid #1d2a6d',
+                      padding: '8px 20px', borderRadius: '8px', cursor: 'pointer',
+                      fontWeight: '600', fontSize: '14px',
+                    }}>
+                    No, Thanks
+                  </button>
 
-{/* Tour Popup */}
-{isConceptTourRunning && anchorEl && isPopupVisible && !showInstructions && (
-  <Popper
+                  <button onClick={() => {
+                    setShowWelcome(false);
+                    setTourRunning(true); 
+                    setConceptStepSynced(0);
+                    setTimeout(() => {
+                      const el = conceptTourSteps[0].ref.current;
+                      if (!el) return;
+                      setAnchorEl(el);
+                      setIsPopupVisible(true);
+                      speakTourText(conceptTourSteps[0].text);
+                    }, 500);
+                  }}
+                    style={{
+                      background: '#1d2a6d', color: 'white', border: 'none',
+                      padding: '8px 20px', borderRadius: '8px', cursor: 'pointer',
+                      fontWeight: '600', fontSize: '14px',
+                    }}>
+                    Yes, Please
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Popper>
+        )}
+      </DialogTitle>
+
+      {/* Tour Popup */}
+      {isConceptTourRunning && anchorEl && isPopupVisible && !showInstructions && (
+        <Popper
           open={true}
           anchorEl={anchorEl}
           placement={conceptTourSteps[conceptStep]?.placement || "bottom-start"}
@@ -672,173 +776,181 @@ const handleAnalyzeDone = () => {
             { name: 'preventOverflow', options: { boundary: 'viewport', padding: 12 } },
             { name: 'hide', enabled: false },
             {
-              name: 'reportPlacement',
-              enabled: true,
-              phase: 'afterWrite',
-              fn: ({ state }) => {
-                setActualPlacement(state.placement);
-              },
+              name: 'reportPlacement', enabled: true, phase: 'afterWrite',
+              fn: ({ state }) => { setActualPlacement(state.placement); },
             },
           ]}>
-        
+
           <div style={{
             width: '320px',
             background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
-            borderRadius: '18px', 
-            padding: '16px',
+            borderRadius: '18px', padding: '16px',
             boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-            border: '2px solid #1d2a5d',
-            position: 'relative',
+            border: '2px solid #1d2a5d', position: 'relative',
           }}>
-          <div style={getArrowStyle(actualPlacement)}/>
+            <div style={getArrowStyle(actualPlacement)} />
 
-          <div style={{
-          textAlign: 'center', 
-          fontSize: '15px', 
-          fontWeight: '700',
-          color: '#1d2a6d', 
-          marginBottom: '12px',
-          borderBottom: '1px solid #cbd5e1', 
-          paddingBottom: '8px'
-          }}>
-          {showActionRequired ? "⚠️ Action Required" : conceptTourSteps[conceptStep]?.title}
-          </div>
+            <div style={{
+              textAlign: 'center', fontSize: '15px', fontWeight: '700',
+              color: '#1d2a6d', marginBottom: '12px',
+              borderBottom: '1px solid #cbd5e1', paddingBottom: '8px'
+            }}>
+              {showActionRequired ? "⚠️ Action Required" : conceptTourSteps[conceptStep]?.title}
+            </div>
 
-        <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.6', marginBottom: '18px' }}>
-        {showActionRequired ? (
-        ((conceptTourSteps[conceptStep]?.requiresAnalyze || 
-        conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone
-        ? "Please click the Analyze Frequency button before proceeding."
-        : "Please click the Generate button before proceeding."
-        ).split(" ").map((word, i) => (
-        <span key={i} style={{
-        padding: "1px 3px", marginRight: "3px", borderRadius: "4px", display: "inline-block",
-        background: i === tourWordIndex ? "#fff8e1" : "transparent",
-        color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
-        fontWeight: i === tourWordIndex ? "600" : "400",
-        borderBottom: i === tourWordIndex ? "2px solid #f59e0b" : "2px solid transparent",
-        transition: "all 0.15s ease",
-        }}>
-        {word}
-        </span>
-        ))
-        ) : (
-        conceptTourSteps[conceptStep]?.text.split(" ").map((word, i) => (
-        <span key={i} style={{
-        padding: "1px 3px", marginRight: "3px", borderRadius: "4px", display: "inline-block",
-        background: i === tourWordIndex ? "#fff8e1" : "transparent",
-        color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
-        fontWeight: i === tourWordIndex ? "600" : "400",
-        borderBottom: i === tourWordIndex ? "2px solid #f59e0b" : "2px solid transparent",
-        transition: "all 0.15s ease",
-        }}>
-        {word}
-        </span>
-        ))
-        )}
-        </div>
+            <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.6', marginBottom: '18px' }}>
+              {showActionRequired ? (
+                ((conceptTourSteps[conceptStep]?.requiresAnalyze ||
+                  conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone
+                  ? "Please click the Analyze Frequency button before proceeding."
+                  : "Please click the Generate button before proceeding."
+                ).split(" ").map((word, i) => (
+                  <span key={i} style={{
+                    padding: "1px 3px", marginRight: "3px", borderRadius: "4px", display: "inline-block",
+                    background: i === tourWordIndex ? "#fff8e1" : "transparent",
+                    color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
+                    fontWeight: i === tourWordIndex ? "600" : "400",
+                    borderBottom: i === tourWordIndex ? "2px solid #f59e0b" : "2px solid transparent",
+                    transition: "all 0.15s ease",
+                  }}>{word}</span>
+                ))
+              ) : (
+                (conceptTourSteps[conceptStep]?.requiresTreeComplete && treeCompleted && treeCompleteMessage
+                  ? treeCompleteMessage
+                  : conceptTourSteps[conceptStep]?.text
+                ).split(" ").map((word, i) => (
+                  <span key={i} style={{
+                    padding: "1px 3px", marginRight: "3px", borderRadius: "4px", display: "inline-block",
+                    background: i === tourWordIndex ? "#fff8e1" : "transparent",
+                    color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
+                    fontWeight: i === tourWordIndex ? "600" : "400",
+                    borderBottom: i === tourWordIndex ? "2px solid #f59e0b" : "2px solid transparent",
+                    transition: "all 0.15s ease",
+                  }}>{word}</span>
+                ))
+              )}
+
+              {isConceptTourRunning && conceptTourSteps[conceptStep]?.requiresTreeComplete && !treeCompleted && (
+                <div style={{
+                  marginBottom: '12px', background: 'rgba(255,255,255,0.6)',
+                  borderRadius: '10px', padding: '10px 14px', border: '1px solid #c7d2fe'
+                }}>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', fontSize: '12px',
+                    color: '#1d2a6d', fontWeight: '600', marginBottom: '6px'
+                  }}>
+                    <span>🌳 Tree Building Progress</span>
+                    <span>{currentMerge} / {Math.floor(totalMerges / 2)} merges</span>
+                  </div>
+                  <div style={{ background: '#e2e8f0', borderRadius: '4px', height: '8px' }}>
+                    <div style={{
+                      width: totalMerges > 0 ? `${(currentMerge / Math.floor(totalMerges / 2)) * 100}%` : '0%',
+                      background: 'linear-gradient(90deg, #1d2a6d, #3b82f6)',
+                      height: '8px', borderRadius: '4px', transition: 'width 0.4s ease'
+                    }} />
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '5px', textAlign: 'center' }}>
+                    Keep clicking "Next Step" to build the tree!
+                  </div>
+                </div>
+              )}
+
+              {isConceptTourRunning && conceptTourSteps[conceptStep]?.requiresTreeComplete && treeCompleted && (
+                <div style={{
+                  marginBottom: '12px',
+                  background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)',
+                  borderRadius: '10px', padding: '10px 14px',
+                  border: '1px solid #6ee7b7', textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '22px', marginBottom: '4px' }}>🎉</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#065f46', marginBottom: '2px' }}>
+                    Tree Complete!
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#047857' }}>
+                    All {Math.floor(totalMerges / 2)} merges done. Click Next to continue →
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => {
-                  setIsConceptTourRunning(false);
-                  setConceptStepSynced(0);
-                  setAnchorEl(null);
-                  window.speechSynthesis.cancel();
-                  if (wordTimersRef.current) {
-                    wordTimersRef.current.forEach(t => clearTimeout(t));
-                    wordTimersRef.current = [];
-                  }
-                  setTourWordIndex(-1);
-                  setIsHuffmanSpeaking(false);
-                  conceptTourSteps.forEach(step => {
-                  const el = step.ref?.current;
-                  if (el) {
-                  el.style.outline = '';
-                  el.style.boxShadow = '';
-                  el.style.borderRadius = '';
-                  }
-                  });
-                }} style={{
-                  background: 'transparent', border: '1px solid #1d2a6d', borderRadius: '10px',
-                  padding: '8px 14px', color: '#64748b', fontWeight: '600', cursor: 'pointer', fontSize: '13px'
-                }}>EXIT</button>
+                {/* ✅ EXIT button — cancelTour use karo */}
+                <button onClick={cancelTour}
+                  style={{
+                    background: 'transparent', border: '1px solid #1d2a6d', borderRadius: '10px',
+                    padding: '8px 14px', color: '#64748b', fontWeight: '600', cursor: 'pointer', fontSize: '13px'
+                  }}>EXIT</button>
 
                 <button
                   onClick={() => {
                     setShowActionRequired(false);
-                    if (conceptStep > 0) {
-                      goToStep(conceptStep - 1);
-                    }
+                    if (conceptStep > 0) goToStep(conceptStep - 1);
                   }}
                   disabled={conceptStep === 0}
                   style={{
-                    background: '#d1d5db', 
-                    color: '#1d2a6d', 
-                    border: '1px solid #1d2a6d',
-                    padding: '8px 14px', 
-                    borderRadius: '10px',
+                    background: '#d1d5db', color: '#1d2a6d', border: '1px solid #1d2a6d',
+                    padding: '8px 14px', borderRadius: '10px',
                     cursor: conceptStep === 0 ? 'not-allowed' : 'pointer',
-                    fontWeight: '600', 
-                    fontSize: '13px'
+                    fontWeight: '600', fontSize: '13px'
                   }}>Back</button>
-                </div>
-                <button
-  onClick={() => {
-    const currentStepData = conceptTourSteps[conceptStep];
-    
-    if (currentStepData?.waitingForSymbol) {
-      setWaitingForSymbol(true);
-      waitingForSymbolRef.current = true;
-      setAnchorEl(null);
-      setIsPopupVisible(false);
-      return;
-    }
+              </div>
 
-    if ((currentStepData?.requiresAnalyze || currentStepData?.waitingForAnalyze) 
-        && !isAnalyzeDoneRef.current) {
-      setShowActionRequired(true);
-      speakTourText("Please click the Analyze Frequency button before proceeding.");
-      return;
-    }
+              <button
+                onClick={() => {
+                  const currentStepData = conceptTourSteps[conceptStep];
 
-    if (currentStepData?.requiresGenerate && !isTreeGeneratedRef.current) {
-      setShowActionRequired(true);
-      speakTourText("Please click the Generate button before proceeding.");
-      return;
-    }
+                  if (currentStepData?.waitingForSymbol) {
+                    setWaitingForSymbol(true);
+                    waitingForSymbolRef.current = true;
+                    return;
+                  }
 
-    setShowActionRequired(false);
+                  if ((currentStepData?.requiresAnalyze || currentStepData?.waitingForAnalyze)
+                    && !isAnalyzeDoneRef.current) {
+                    setShowActionRequired(true);
+                    speakTourText("Please click the Analyze Frequency button before proceeding.");
+                    return;
+                  }
 
-    if (conceptStep < conceptTourSteps.length - 1) {
-      goToStep(conceptStep + 1);
-    } else {
-      setIsConceptTourRunning(false);
-      setConceptStepSynced(0);
-      setAnchorEl(null);
-      window.speechSynthesis.cancel();
-    }
-  }}
-  style={{
-    background: (
-      ((conceptTourSteps[conceptStep]?.requiresAnalyze || 
-        conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone) ||
-      (conceptTourSteps[conceptStep]?.requiresGenerate && !isTreeGenerated)
-    ) ? "#9ca3af" : "#1d2a6d",
-    color: "white",
-    border: "none",
-    padding: "8px 18px",
-    borderRadius: "10px",
-    cursor: (
-      ((conceptTourSteps[conceptStep]?.requiresAnalyze || 
-        conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone) ||
-      (conceptTourSteps[conceptStep]?.requiresGenerate && !isTreeGenerated)
-    ) ? "not-allowed" : "pointer",
-    fontWeight: "600",
-    fontSize: "13px"
-  }}>
-  {conceptStep === conceptTourSteps.length - 1 ? 'Finish' : 'Next'}
-</button>
-                
+                  if (currentStepData?.requiresGenerate && !isTreeGeneratedRef.current) {
+                    setShowActionRequired(true);
+                    speakTourText("Please click the Generate button before proceeding.");
+                    return;
+                  }
+
+                  if (currentStepData?.requiresTreeComplete && !treeCompletedRef.current) {
+                    speakTourText("Please complete the tree by clicking Next Step button until tree is fully built.");
+                    return;
+                  }
+
+                  setShowActionRequired(false);
+
+                  if (conceptStep < conceptTourSteps.length - 1) {
+                    goToStep(conceptStep + 1);
+                  } else {
+                    cancelTour();
+                  }
+                }}
+                style={{
+                  background: (
+                    ((conceptTourSteps[conceptStep]?.requiresAnalyze ||
+                      conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone) ||
+                    (conceptTourSteps[conceptStep]?.requiresGenerate && !isTreeGenerated) ||
+                    (conceptTourSteps[conceptStep]?.requiresTreeComplete && !treeCompleted)
+                  ) ? "#9ca3af" : "#1d2a6d",
+                  color: "white", border: "none", padding: "8px 18px",
+                  borderRadius: "10px",
+                  cursor: (
+                    ((conceptTourSteps[conceptStep]?.requiresAnalyze ||
+                      conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone) ||
+                    (conceptTourSteps[conceptStep]?.requiresGenerate && !isTreeGenerated) ||
+                    (conceptTourSteps[conceptStep]?.requiresTreeComplete && !treeCompleted)
+                  ) ? "not-allowed" : "pointer",
+                  fontWeight: "600", fontSize: "13px"
+                }}>
+                {conceptStep === conceptTourSteps.length - 1 ? 'Finish' : 'Next'}
+              </button>
             </div>
 
             <div style={{ marginTop: '12px' }}>
@@ -859,37 +971,61 @@ const handleAnalyzeDone = () => {
       <DialogContent sx={{ padding: "0px", height: "1700px" }}>
         {showInstructions && (
           <Box style={{
-            position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)',
-            zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center'
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)',
+            zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
             <Box sx={{ background: 'white', borderRadius: '8px', maxWidth: '580px', width: '90%', overflow: 'hidden' }}>
               <Box sx={{ background: '#1a3a5c', padding: '12px 20px' }}>
                 <span style={{ color: 'white', fontSize: '20px', fontWeight: 600 }}>Instructions of Huffman Encoding:</span>
               </Box>
               <Box sx={{ padding: '20px 24px 8px' }}>
-                <p style={{ fontSize: '14px', color: '#333', margin: '0 0 10px' }}><strong>Step 1 - </strong> Select a symbol image from Choose box or type your own text.</p>
-                <p style={{ fontSize: '14px', color: '#333', margin: '0 0 10px' }}><strong>Step 2 - </strong> Click <b>"Analyze Frequency"</b> button.</p>
-                <p style={{ fontSize: '14px', color: '#333', margin: '0 0 10px' }}><strong>Step 3 - </strong> Click <b>"Generate"</b> button.</p>
-                <p style={{ fontSize: '14px', color: '#333', margin: '0 0 10px' }}><strong>Step 4 - </strong> Click <b>"Next Step"</b> repeatedly.</p>
-                <p style={{ fontSize: '14px', color: '#333', margin: '0 0 10px' }}><strong>Step 5 - </strong> Final binary codes will be displayed.</p>
-                <p style={{ fontSize: '14px', color: '#333', margin: '0 0 10px' }}><strong>Step 6 - </strong> Click <b>"Reset"</b> to start over.</p>
-                <div style={{ marginTop: '16px', padding: '10px 14px', background: '#f0f4ff', borderRadius: '8px', borderLeft: '3px solid #1d2a6d', fontSize: '13px', color: '#555' }}>
+                {[
+                  { stepNum: 1, html: 'Select a symbol image from Choose box or type your own text.' },
+                  { stepNum: 2, html: 'Click <b>"Analyze Frequency"</b> button.' },
+                  { stepNum: 3, html: 'Click <b>"Generate"</b> button.' },
+                  { stepNum: 4, html: 'Click <b>"Next Step"</b> repeatedly.' },
+                  { stepNum: 5, html: 'Final binary codes will be displayed.' },
+                  { stepNum: 6, html: 'Click <b>"Reset"</b> to start over.' },
+                ].map((step, idx) => (
+                  <p key={idx} style={{
+                    fontSize: '14px', margin: '0 0 10px', padding: '4px 6px', borderRadius: '4px',
+                    backgroundColor: activeInstructionStep === idx ? '#fff8e1' : 'transparent',
+                    color: activeInstructionStep === idx ? '#92400e' : '#333',
+                    fontWeight: activeInstructionStep === idx ? '600' : '400',
+                    borderLeft: activeInstructionStep === idx ? '3px solid #f59e0b' : '3px solid transparent',
+                    transition: 'all 0.3s ease',
+                  }}>
+                    <strong>Step {step.stepNum} - </strong>
+                    <span dangerouslySetInnerHTML={{ __html: step.html }} />
+                  </p>
+                ))}
+                <div style={{
+                  marginTop: '16px', padding: '10px 14px', background: '#f0f4ff',
+                  borderRadius: '8px', borderLeft: '3px solid #1d2a6d', fontSize: '13px', color: '#555'
+                }}>
                   <strong>Tip:</strong> Characters with higher frequency get shorter binary codes!
                 </div>
                 <button onClick={() => {
-                   window.speechSynthesis.cancel(); 
-                   setShowInstructions(false); 
-                   if(isConceptTourRunning){
+                  window.speechSynthesis.cancel();
+                  setShowInstructions(false);
+                  setActiveInstructionStep(-1);
+                  if (isConceptTourRunning) {
                     speakTourText(conceptTourSteps[conceptStep].text);
-                   }
-                   }}
-                  style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '15px auto 0', background: 'white', color: '#1d2a6d', border: '2px solid #1d2a6d', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontSize: '16px' }}>
+                  }
+                }}
+                  style={{
+                    display: 'flex', justifyContent: 'center', alignItems: 'center',
+                    margin: '15px auto 0', background: 'white', color: '#1d2a6d',
+                    border: '2px solid #1d2a6d', borderRadius: '6px', padding: '4px 10px',
+                    cursor: 'pointer', fontSize: '16px'
+                  }}>
                   <b>CLOSE</b>
                 </button>
               </Box>
             </Box>
           </Box>
         )}
+
         {open && <HuffmanAnimation
           symbolTextToggleRef={symbolTextToggleRef}
           symbolBoxRef={symbolBoxRef}
@@ -905,22 +1041,22 @@ const handleAnalyzeDone = () => {
           onAnalyzeDone={handleAnalyzeDone}
           onTextEntered={handleTextEntered}
           onRegisterReset={(fn) => { resetAnimationRef.current = fn; }}
-          onGenerate={() => {setIsTreeGenerated(true);
+          onGenerate={() => {
+            setIsTreeGenerated(true);
             isTreeGeneratedRef.current = true;
-            if (isConceptTourRunning && conceptTourSteps[conceptStepRef.current]?.requiresGenerate) {
-            setShowActionRequired(false);
-            const next = conceptStepRef.current + 1;
-            setConceptStepSynced(next);
-            const el = conceptTourSteps[next]?.ref?.current;
-            if (el) setAnchorEl(el);
-            speakTourText(conceptTourSteps[next].text);
-            } 
+            if (isConceptTourRunningRef.current && conceptTourSteps[conceptStepRef.current]?.requiresGenerate) {
+              setShowActionRequired(false);
+              const next = conceptStepRef.current + 1;
+              setConceptStepSynced(next);
+              goToStep(next);
+            }
           }}
-          onReset={() => {setIsTreeGenerated(false);
+          onReset={() => {
+            setIsTreeGenerated(false);
             isTreeGeneratedRef.current = false;
             setIsAnalyzeDone(false);
             isAnalyzeDoneRef.current = false;
-            setIsConceptTourRunning(false);
+            setTourRunning(false); 
             setAnchorEl(null);
             setIsPopupVisible(false);
             setWaitingForAnalyze(false);
@@ -928,7 +1064,16 @@ const handleAnalyzeDone = () => {
             setWaitingForSymbol(false);
             waitingForSymbolRef.current = false;
             window.speechSynthesis.cancel();
+            setTreeCompleted(false);
+            treeCompletedRef.current = false;
+            setCurrentMerge(0);
+            setTotalMerges(0);
           }}
+          treeDescriptionRef={treeDescriptionRef}
+          encodedTableRef={encodedTableRef}
+          onStepsGenerated={handleStepsGenerated}
+          onNextStepDone={handleNextStepDone}
+          onTreeComplete={handleTreeComplete}
         />}
       </DialogContent>
     </Dialog>
