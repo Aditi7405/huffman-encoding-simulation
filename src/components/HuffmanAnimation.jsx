@@ -42,7 +42,7 @@ export default function HuffmanAnimation({
   onSymbolSelected, onAnalyzeDone, onTextEntered, onRegisterReset,
   symbolBoxRef,textInputBoxRef, onGenerate, onReset, treeDescriptionRef,
   encodedTableRef,onStepsGenerated, onNextStepDone, onTreeComplete,
-  onNewInput,
+  onNewInput, onInputModeChange,
 }) {
     const [image,setImage]=useState(0);
     const [original,setOriginal]=useState(null);
@@ -60,6 +60,8 @@ export default function HuffmanAnimation({
     const [isComplete, setIsComplete] = useState(false);
     const [showEdgeExplanation, setShowEdgeExplanation] = useState(false);
     const [inputMode, setInputMode] = useState('symbol');
+
+    const hasNotifiedTextRef = useRef(false);
 
     useEffect(() => {
       if (onRegisterReset) {
@@ -79,6 +81,10 @@ export default function HuffmanAnimation({
         });
       }
     }, []);
+
+    useEffect(() => {
+        if (onInputModeChange) onInputModeChange(inputMode);
+    }, [inputMode]);
 
     function convertNode(node) {
       if (!node) return null;
@@ -455,7 +461,11 @@ export default function HuffmanAnimation({
     🔣 Symbol
     </button>
     <button
-    onClick={() => { setInputMode('text'); setOriginal(null); setImage(0); }}
+    onClick={() => { 
+        setInputMode('text'); 
+        setOriginal(null); 
+        setImage(0); 
+        }}
     style={{
       flex: 1,
       padding: '10px',
@@ -515,9 +525,11 @@ export default function HuffmanAnimation({
     value={tdata}
     onChange={(e) => { 
         const newVal = e.target.value;
-        if (newVal.length === 1 && onNewInput) onNewInput();
-        setTdata(e.target.value);
         setTdata(newVal);
+        if (newVal.length === 0 ) {
+        hasNotifiedTextRef.current = false;
+        setTdata(e.target.value);
+        //setTdata(newVal);
         setCurrentStep(-1);
         setTree(null);
         setShowInitialNodes(false);
@@ -528,10 +540,12 @@ export default function HuffmanAnimation({
         setShowEdgeExplanation(false);
         setOriginal(null);
         setImage(0);
-        
-    if (newVal.length === 1 && onTextEntered) {
-    onTextEntered();
-    }
+        }
+        if (newVal.length > 0 && !hasNotifiedTextRef.current && onTextEntered) {
+            console.log('onTextEntered firing, length:', newVal.length, 'hasNotified:', hasNotifiedTextRef.current);
+        hasNotifiedTextRef.current = true;
+        onTextEntered();
+        }
     }}
     disabled={inputMode === 'symbol'}
     style={{

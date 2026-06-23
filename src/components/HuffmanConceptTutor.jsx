@@ -83,6 +83,9 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   const [instructionsWodIndex, setInstructionsWordIndex] = useState(-1);
   const [activeInstructionStep, setActiveInstructionStep] = useState(-1);
   const [treeCompleteMessage, setTreeCompleteMessage] = useState('');
+  const [dynamicAnchorPlacement, setDynamicAnchorPlacement] = useState(null);
+  const [dynamicTourText, setDynamicTourText] = useState(null);
+  const [dynamicOffset, setDynamicOffset] = useState(null);
 
   const guidedTutorRef = useRef(null);
   const instructionBtnRef = useRef(null);
@@ -113,6 +116,8 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   const treeCompletedRef = useRef(false);
   const totalMergesRef = useRef(0);
   const isConceptTourRunningRef = useRef(false); 
+  const inputModeRef = useRef('symbol');
+  const hasNotifiedTextRef = useRef(false);
 
   const setConceptStepSynced = (val) => {
     conceptStepRef.current = val;
@@ -148,6 +153,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   };
 
   const restartFromInput = () => {
+  hasNotifiedTextRef.current = false;  
   setIsAnalyzeDone(false);
   isAnalyzeDoneRef.current = false;
   setIsTreeGenerated(false);
@@ -347,7 +353,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   }, [conceptStep, isConceptTourRunning]);
 
   const speakTourText = (text, onDone) => {
-    if (!isSpeechEnabledRef.current) {
+    if (!isSpeechEnabledRef.current || !isConceptTourRunningRef.current) {
       if (onDone) onDone();
       return;
     }
@@ -408,6 +414,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   };
 
   const handleSymbolSelected = (index) => {
+    console.log('handleTextEntered called, waitingForSymbol:', waitingForSymbolRef.current, 'isHandling:', isHandlingSymbolRef.current);
     if (!waitingForSymbolRef.current) {
       
       if (isConceptTourRunningRef.current) {
@@ -427,11 +434,18 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
       symbolEl.style.outline = '3px solid #f59e0b';
       symbolEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
       symbolEl.style.borderRadius = '8px';
+      setAnchorEl(symbolEl);
+      setDynamicAnchorPlacement('right');
+      setDynamicOffset([100, 10]);
     }
 
     const name = symbolNames[index];
+    const dynamicText = `You selected ${name}.`;
+    setDynamicTourText(dynamicText);
+
+
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(`You selected ${name}.`);
+    const utterance = new SpeechSynthesisUtterance(dynamicText);
     utterance.rate = 0.95;
     const voices = window.speechSynthesis.getVoices();
     if (voices.length > 0) utterance.voice = voices[0];
@@ -493,49 +507,74 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   const handleTreeComplete = () => {
     setTreeCompleted(true);
     treeCompletedRef.current = true;
+
+    if (!isConceptTourRunningRef.current) return;
     const msg = "Excellent! The Huffman Tree is now complete. All characters have been merged into a single root node. Click Next to continue.";
     setTreeCompleteMessage(msg);
     speakTourText(msg);
   };
 
-  const handleTextEntered = () => {
-    if (!waitingForSymbolRef.current) {
-      if (isConceptTourRunningRef.current) {
-        restartFromInput();
-      }
-      return;
-    }
+ const handleTextEntered = () => {
+  // ✅ Check waiting FIRST before marking as notified
+  if (!waitingForSymbolRef.current) return;
+  if (isHandlingSymbolRef.current) return;
 
-    if (resetAnimationRef.current) resetAnimationRef.current();
-    setWaitingForSymbol(false);
-    waitingForSymbolRef.current = false;
+  // ✅ Only mark as handled if we actually proceed
+  if (hasNotifiedTextRef.current) return;
+  hasNotifiedTextRef.current = true;
 
-    const textEl = textInputBoxRef.current;
-    if (textEl) {
-      textEl.style.outline = '3px solid #f59e0b';
-      textEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
-      textEl.style.borderRadius = '8px';
-    }
+  isHandlingSymbolRef.current = true;
 
-    speakTourText("Text entered. Now click Analyze Frequency.", () => {
-      const next = conceptStepRef.current + 1;
-      setWaitingForAnalyze(true);
-      waitingForAnalyzeRef.current = true;
-      setTourRunning(true); 
-      goToStep(next);
-    });
+  setWaitingForSymbol(false);
+  waitingForSymbolRef.current = false;
+  setWaitingForAnalyze(true);
+  waitingForAnalyzeRef.current = true;
+
+  const textEl = textInputBoxRef.current;
+  if (textEl) {
+    textEl.style.outline = '3px solid #f59e0b';
+    textEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+    textEl.style.borderRadius = '8px';
+  }
+  setAnchorEl(textEl);
+  setDynamicAnchorPlacement('right');
+  setDynamicOffset([100, 10]);
+
+  const dynamicText = "Here you can type the text which you want to encode. Once done, click Analyze Frequency.";
+  setDynamicTourText(dynamicText);
+
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance("Text Entered. Now click on next button.");
+  utterance.rate = 0.95;
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length > 0) utterance.voice = voices[0];
+
+  utterance.onend = () => {
+    isHandlingSymbolRef.current = false;
   };
+
+  utterance.onerror = (e) => {
+    if (e.error === 'interrupted') return;
+    isHandlingSymbolRef.current = false;
+  };
+
+  window.speechSynthesis.speak(utterance);
+};
 
   const goToStep = (stepIndex) => {
     setShowActionRequired(false);
     setConceptStepSynced(stepIndex);
     setTourWordIndex(-1);
+    setDynamicAnchorPlacement(null);
+    setDynamicOffset(null);
+    setDynamicTourText(null);
     window.speechSynthesis.cancel();
 
     if (conceptTourSteps[stepIndex]?.waitingForSymbol) {
       setWaitingForSymbol(true);
       waitingForSymbolRef.current = true;
       isHandlingSymbolRef.current = false;
+      hasNotifiedTextRef.current = false;
     } else {
       setWaitingForSymbol(false);
       waitingForSymbolRef.current = false;
@@ -646,7 +685,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
             }}
             style={{
               background: "white", color: "#1d2a6d", fontWeight: 600,
-              padding: "8px 18px", borderRadius: "13px", cursor: "pointer",
+              padding: "8px 18px", borderRadius: "15px", cursor: "pointer",
               whiteSpace: "nowrap", fontSize: "14px", width: "145px", height: "42px",
               display: "flex", alignItems: "center", justifyContent: "center",
               border: "1px solid #333",
@@ -768,10 +807,10 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
         <Popper
           open={true}
           anchorEl={anchorEl}
-          placement={conceptTourSteps[conceptStep]?.placement || "bottom-start"}
+          placement={dynamicAnchorPlacement || conceptTourSteps[conceptStep]?.placement || "bottom-start"}
           style={{ zIndex: 999999 }}
           modifiers={[
-            { name: 'offset', options: { offset: conceptTourSteps[conceptStep]?.offset || [0, 10] } },
+            { name: 'offset', options: { offset: dynamicOffset || conceptTourSteps[conceptStep]?.offset || [0, 10] } },
             { name: 'flip', enabled: true },
             { name: 'preventOverflow', options: { boundary: 'viewport', padding: 12 } },
             { name: 'hide', enabled: false },
@@ -795,7 +834,9 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
               color: '#1d2a6d', marginBottom: '12px',
               borderBottom: '1px solid #cbd5e1', paddingBottom: '8px'
             }}>
-              {showActionRequired ? "⚠️ Action Required" : conceptTourSteps[conceptStep]?.title}
+              {showActionRequired ? "⚠️ Action Required" 
+              : dynamicTourText ? (inputModeRef.current === 'text' ? "Text Input" : "Symbol Selected")
+              : conceptTourSteps[conceptStep]?.title}
             </div>
 
             <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.6', marginBottom: '18px' }}>
@@ -815,7 +856,9 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                   }}>{word}</span>
                 ))
               ) : (
-                (conceptTourSteps[conceptStep]?.requiresTreeComplete && treeCompleted && treeCompleteMessage
+                (dynamicTourText
+                ? dynamicTourText
+                : conceptTourSteps[conceptStep]?.requiresTreeComplete && treeCompleted && treeCompleteMessage
                   ? treeCompleteMessage
                   : conceptTourSteps[conceptStep]?.text
                 ).split(" ").map((word, i) => (
@@ -900,11 +943,53 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                 onClick={() => {
                   const currentStepData = conceptTourSteps[conceptStep];
 
-                  if (currentStepData?.waitingForSymbol) {
-                    setWaitingForSymbol(true);
-                    waitingForSymbolRef.current = true;
-                    return;
-                  }
+                if (currentStepData?.waitingForSymbol) {
+  // ✅ If text mode and text already entered (waitingForSymbol is now false),
+  // allow advancing normally — don't return early
+  if (!waitingForSymbolRef.current) {
+    // user already entered text, just go to next step
+    setDynamicAnchorPlacement(null);
+    setDynamicOffset(null);
+    setDynamicTourText(null);
+    goToStep(conceptStep + 1);
+    return;
+  }
+
+  // still waiting — show the prompt as before
+  setWaitingForSymbol(true);
+  waitingForSymbolRef.current = true;
+  hasNotifiedTextRef.current = false;
+
+  const mode = inputModeRef.current;
+  if (mode === 'text') {
+    const tEl = textInputBoxRef.current;
+    if (tEl) {
+      tEl.style.outline = '3px solid #f59e0b';
+      tEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+      tEl.style.borderRadius = '8px';
+      setAnchorEl(tEl);
+      setDynamicAnchorPlacement('right');
+      setDynamicOffset([100, 10]);
+    }
+    const msg = "Here you can type the text which you want to encode. Type something to continue.";
+    setDynamicTourText(msg);
+    speakTourText(msg);
+  } else {
+    const sEl = symbolBoxRef.current;
+    if (sEl) {
+      sEl.style.outline = '3px solid #f59e0b';
+      sEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+      sEl.style.borderRadius = '8px';
+      setAnchorEl(sEl);
+      setDynamicAnchorPlacement('right');
+      setDynamicOffset([100, 10]);
+    }
+    const msg = "Here are the symbols — Plus, Minus, Multiply, and Divide. Choose any one to continue.";
+    setDynamicTourText(msg);
+    speakTourText(msg);
+  }
+  return;
+}
 
                   if ((currentStepData?.requiresAnalyze || currentStepData?.waitingForAnalyze)
                     && !isAnalyzeDoneRef.current) {
@@ -1039,6 +1124,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
           treeVisualizationRef={treeVisualizationRef}
           onSymbolSelected={handleSymbolSelected}
           onAnalyzeDone={handleAnalyzeDone}
+          onInputModeChange={(mode) => {inputModeRef.current = mode; }}
           onTextEntered={handleTextEntered}
           onRegisterReset={(fn) => { resetAnimationRef.current = fn; }}
           onGenerate={() => {
@@ -1052,6 +1138,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
             }
           }}
           onReset={() => {
+            hasNotifiedTextRef.current = false;
             setIsTreeGenerated(false);
             isTreeGeneratedRef.current = false;
             setIsAnalyzeDone(false);
