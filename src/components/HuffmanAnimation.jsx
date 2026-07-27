@@ -10,6 +10,7 @@ import Tree from 'react-d3-tree';
 import HuffmanTree from './hufftree';
 import HuffmanTreeViewer from './htimage';
 import Box from '@mui/material/Box';
+import html2pdf from 'html2pdf.js';
 
 class TreeErrorBoundary extends React.Component {
   constructor(props) {
@@ -43,6 +44,7 @@ export default function HuffmanAnimation({
   symbolBoxRef,textInputBoxRef, onGenerate, onReset, treeDescriptionRef,
   encodedTableRef,onStepsGenerated, onNextStepDone, onTreeComplete,
   onNewInput, onInputModeChange,
+  preTestResult, postTestResult,
 }) {
     const [image,setImage]=useState(0);
     const [original,setOriginal]=useState(null);
@@ -62,6 +64,14 @@ export default function HuffmanAnimation({
     const [inputMode, setInputMode] = useState('symbol');
 
     const hasNotifiedTextRef = useRef(false);
+    const experimentStartRef = useRef(null);
+    const experimentEndRef = useRef(null);
+
+    // Mark the experiment start the moment this simulation mounts,
+    // so the report can show Start Time / End Time / Total Time Spent.
+    useEffect(() => {
+      experimentStartRef.current = Date.now();
+    }, []);
 
     useEffect(() => {
       if (onRegisterReset) {
@@ -78,6 +88,8 @@ export default function HuffmanAnimation({
           setTreeReady(false);
           setOriginal(null);
           setImage(0);
+          experimentStartRef.current = Date.now();
+          experimentEndRef.current = null;
         });
       }
     }, []);
@@ -268,11 +280,555 @@ export default function HuffmanAnimation({
       setIsComplete(false);
       if (onStepsGenerated) onStepsGenerated(steps.length);
     }
+    function computeReportStats() {
+  const totalSymbols = frequencyData.reduce((sum, item) => sum + item.freq, 0);
+  const originalBitsPerSymbol = inputMode === 'symbol' ? 1 : 8; // bitmap = 1 bit/pixel, text = 8 bits/char (ASCII)
+  const originalSizeBits = totalSymbols * originalBitsPerSymbol;
+
+  const compressedSizeBits = encodedTable.reduce((sum, item) => {
+    const freqItem = frequencyData.find(f => f.char === item.char);
+    return sum + (freqItem ? freqItem.freq * item.code.length : 0);
+  }, 0);
+
+  const compressionRatio = originalSizeBits > 0 ? (compressedSizeBits / originalSizeBits) : 0;
+  const spaceSaved = originalSizeBits > 0 ? (1 - compressionRatio) * 100 : 0;
+
+  return { totalSymbols, originalSizeBits, compressedSizeBits, compressionRatio, spaceSaved };
+}
+
+// ---------- small inline SVG glyphs (avoid literal -, ×, ÷ characters) ----------
+function opGlyph(op) {
+  const common = 'style="display:inline-block;vertical-align:middle;margin:0 3px;"';
+  if (op === "-") {
+    return `<svg width="13" height="13" viewBox="0 0 12 12" ${common} aria-hidden="true"><rect x="1" y="5" width="10" height="2" rx="1" fill="currentColor"/></svg>`;
+  }
+  if (op === "×") {
+    return `<svg width="13" height="13" viewBox="0 0 12 12" ${common} aria-hidden="true"><line x1="1.5" y1="1.5" x2="10.5" y2="10.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="10.5" y1="1.5" x2="1.5" y2="10.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+  }
+  if (op === "÷") {
+    return `<svg width="13" height="13" viewBox="0 0 12 12" ${common} aria-hidden="true"><circle cx="6" cy="2.6" r="1.3" fill="currentColor"/><rect x="1" y="5" width="10" height="2" rx="1" fill="currentColor"/><circle cx="6" cy="9.4" r="1.3" fill="currentColor"/></svg>`;
+  }
+  return op;
+}
+
+function escapeHTMLForReport(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+// ---------- timing helpers for the report (Start Time / End Time / Total Time Spent) ----------
+function formatClockTime(ts) {
+  if (!ts) return "--:--:--";
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function formatDuration(ms) {
+  if (!ms || ms < 0) return "0 sec";
+  const totalSec = Math.round(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (min > 0) return `${min} min ${sec} sec`;
+  return `${sec} sec`;
+}
+
+// Build a real Huffman tree from {char, freq} entries so the report shows
+// the ACTUAL tree used for this run's codes, not an illustrative one.
+function buildReportHuffmanTree(entries) {
+  let nodes = entries.map(({ char, freq }) => ({ key: char, freq, left: null, right: null }));
+  if (nodes.length === 0) return null;
+  if (nodes.length === 1) {
+    nodes.push({ key: null, freq: 0, left: null, right: null, placeholder: true });
+  }
+  while (nodes.length > 1) {
+    nodes.sort((a, b) => a.freq - b.freq);
+    const left = nodes.shift();
+    const right = nodes.shift();
+    nodes.push({ key: null, freq: left.freq + right.freq, left, right });
+  }
+  return nodes[0];
+}
+
+function layoutReportTree(root) {
+  let leafIndex = 0;
+  const positions = new Map();
+  function assignX(node, depth) {
+    if (!node) return;
+    const isLeaf = !node.left && !node.right;
+    if (isLeaf) {
+      positions.set(node, { x: leafIndex, y: depth });
+      leafIndex++;
+      return;
+    }
+    assignX(node.left, depth + 1);
+    assignX(node.right, depth + 1);
+    const lx = node.left ? positions.get(node.left)?.x : undefined;
+    const rx = node.right ? positions.get(node.right)?.x : undefined;
+    const x = lx !== undefined && rx !== undefined ? (lx + rx) / 2 : (lx ?? rx ?? 0);
+    positions.set(node, { x, y: depth });
+  }
+  assignX(root, 0);
+  return positions;
+}
+
+function renderReportHuffmanTreeSVG(root) {
+  if (!root) return "<p>No data to build a tree from.</p>";
+  const positions = layoutReportTree(root);
+  const entries = Array.from(positions.values());
+  const maxX = Math.max(0, ...entries.map((p) => p.x));
+  const maxY = Math.max(0, ...entries.map((p) => p.y));
+
+  const spacingX = 64;
+  const spacingY = 84;
+  const padX = 44;
+  const padY = 34;
+  const width = maxX * spacingX + padX * 2 + 20;
+  const height = maxY * spacingY + padY * 2 + 30;
+
+  const px = (p) => padX + p.x * spacingX;
+  const py = (p) => padY + p.y * spacingY;
+
+  let edges = "";
+  let nodesSvg = "";
+
+  function walk(node) {
+    if (!node || node.placeholder) return;
+    const p = positions.get(node);
+
+    if (node.left && !node.left.placeholder) {
+      const lp = positions.get(node.left);
+      edges += `<line x1="${px(p)}" y1="${py(p)}" x2="${px(lp)}" y2="${py(lp)}" stroke="#94a3b8" stroke-width="2"/>`;
+      edges += `<text x="${(px(p) + px(lp)) / 2 - 10}" y="${(py(p) + py(lp)) / 2}" font-size="12" fill="#1f2937" font-weight="700">0</text>`;
+      walk(node.left);
+    }
+    if (node.right && !node.right.placeholder) {
+      const rp = positions.get(node.right);
+      edges += `<line x1="${px(p)}" y1="${py(p)}" x2="${px(rp)}" y2="${py(rp)}" stroke="#94a3b8" stroke-width="2"/>`;
+      edges += `<text x="${(px(p) + px(rp)) / 2 + 6}" y="${(py(p) + py(rp)) / 2}" font-size="12" fill="#1f2937" font-weight="700">1</text>`;
+      walk(node.right);
+    }
+
+    const isLeaf = !node.left && !node.right;
+    if (isLeaf) {
+      nodesSvg += `<circle cx="${px(p)}" cy="${py(p)}" r="20" fill="#1d2a6d" stroke="#1d2a6d" stroke-width="1.5"/>`;
+      nodesSvg += `<text x="${px(p)}" y="${py(p) + 4}" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">${escapeHTMLForReport(node.key)}</text>`;
+      nodesSvg += `<text x="${px(p)}" y="${py(p) + 34}" font-size="10" fill="#4b5563" text-anchor="middle">${node.freq}</text>`;
+    } else {
+      nodesSvg += `<circle cx="${px(p)}" cy="${py(p)}" r="15" fill="#ffffff" stroke="#1d2a6d" stroke-width="1.5"/>`;
+      nodesSvg += `<text x="${px(p)}" y="${py(p) + 3}" font-size="9" fill="#111827" text-anchor="middle">${node.freq}</text>`;
+    }
+  }
+  walk(root);
+
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${Math.max(220, height)}" xmlns="http://www.w3.org/2000/svg">${edges}${nodesSvg}</svg>`;
+}
+
+function buildReportHtmlString({ inputMode, image, tdata, encodedTable, stats, timing, preTest, postTest }) {
+  const symbolLabels = ['Plus (+)', `Minus (${opGlyph("-")})`, 'Multiply (×)', 'Divide (÷)'];
+  const inputLabel = inputMode === 'symbol'
+    ? (symbolLabels[image] || 'Symbol')
+    : `"${escapeHTMLForReport(tdata)}"`;
+
+  const freqRows = encodedTable.map(item =>
+    `<tr>
+      <td>${escapeHTMLForReport(item.char)}</td>
+      <td>${item.freq}</td>
+      <td><code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;">${item.code}</code></td>
+      <td>${item.code.length} bits</td>
+    </tr>`
+  ).join('');
+
+  const treeEntries = encodedTable.map(item => ({ char: item.char, freq: item.freq }));
+  const reportTree = buildReportHuffmanTree(treeEntries);
+  const treeSvg = renderReportHuffmanTreeSVG(reportTree);
+
+  const savedBits = stats.originalSizeBits - stats.compressedSizeBits;
+  const generatedOn = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  const startLabel = formatClockTime(timing?.startTime);
+  const endLabel = formatClockTime(timing?.endTime);
+  const durationLabel = timing?.startTime && timing?.endTime
+    ? formatDuration(timing.endTime - timing.startTime)
+    : "--";
+
+  function testCardHtml(label, test) {
+    if (!test || typeof test.score !== "number" || typeof test.total !== "number") return "";
+    const pct = test.total > 0 ? ((test.score / test.total) * 100).toFixed(1) : "0.0";
+    return `
+        <div class="results-card">
+          <h3>${label}</h3>
+          <div class="info-grid">
+            <div class="info-card"><span class="label">Score:</span>${test.score} / ${test.total}</div>
+            <div class="info-card"><span class="label">Percentage:</span>${pct}%</div>
+          </div>
+        </div>`;
+  }
+
+  const preTestHtml = testCardHtml("Pre-Test", preTest);
+  const postTestHtml = testCardHtml("Post-Test", postTest);
+  const testsSectionHtml = (preTestHtml || postTestHtml)
+    ? `
+    <div class="section results-section">
+      <h2>Assessment</h2>
+      <div class="results-stack">
+        ${preTestHtml}
+        ${postTestHtml}
+      </div>
+    </div>`
+    : "";
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  body {
+    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(180deg, #eef4fb 0%, #f7f9fc 100%);
+    color: #1f2d3d;
+    margin: 0;
+    padding: 30px 22px 44px;
+    line-height: 1.65;
+  }
+  .report-page {
+    max-width: 900px;
+    margin: 0 auto 24px;
+    padding: 34px 34px 30px;
+    background-color: #ffffff;
+    border-radius: 18px;
+    border: 1px solid #dfe7f1;
+    box-shadow: 0 18px 38px rgba(23, 50, 77, 0.12);
+    box-sizing: border-box;
+  }
+  .report-page:last-of-type { margin-bottom: 0; }
+  h1, h2, h3 { color: #1f2d3d; margin-top: 0; font-weight: 700; }
+  h2 { font-size: 23px; margin-bottom: 16px; color: #243b53; }
+  h3 { font-size: 17px; margin-bottom: 10px; color: #2d4b68; }
+  p { margin: 0 0 12px; }
+  li { margin-bottom: 6px; }
+
+  .header-row {
+    display: grid;
+    grid-template-columns: 108px 1fr 108px;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  .vl-logo { height: 84px; width: auto; max-width: 120px; object-fit: contain; flex-shrink: 0; justify-self: center; }
+  .report-title-block { text-align: center; margin: 0; padding-bottom: 14px; border-bottom: 3px solid #2f7bfa; }
+  .report-kicker { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #5d7794; font-weight: 700; }
+  .report-subtitle { margin: 8px 0 0; font-size: 14px; color: #5c6f84; }
+
+  .report-overview-top { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 12px; }
+  .badge { margin: 0; padding: 8px 14px; border-radius: 20px; background: #e8f1ff; color: #1f62d0; font-weight: 600; font-size: 13px; }
+  .report-stamp { margin: 0; padding: 8px 12px; border-radius: 999px; background: #ffffff; border: 1px solid #dce5ef; color: #50657c; font-size: 13px; font-weight: 600; }
+  .report-experiment-label { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #60778f; font-weight: 700; }
+  .report-experiment-title { margin: 0 0 18px; font-size: 25px; line-height: 1.3; font-weight: 700; color: #16324b; }
+
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 12px; }
+  .info-card {
+    background: #fff; border: 1px solid #e5e9f2; border-radius: 10px; padding: 12px 14px;
+    box-shadow: 0 4px 10px rgba(31,45,61,0.05); font-size: 14px; min-height: 60px;
+    display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  }
+  .label { font-weight: 600; color: #1f2d3d; display: block; margin-bottom: 2px; }
+
+  .section {
+    background: linear-gradient(180deg, #f9fbfe 0%, #f4f7fb 100%);
+    padding: 22px 24px; margin-bottom: 24px; border-radius: 14px;
+    border: 1px solid #e0e8f2; box-shadow: 0 6px 16px rgba(31,45,61,0.05);
+  }
+  .section:last-child { margin-bottom: 0; }
+
+  ul.two-column-list { column-count: 2; column-gap: 40px; list-style: disc; padding-left: 20px; margin-top: 10px; }
+
+  .results-stack { display: grid; gap: 18px; }
+  .results-card {
+    background: #ffffff; border: 1px solid #dde6f0; border-radius: 14px; padding: 18px;
+    box-shadow: 0 4px 12px rgba(31,45,61,0.05);
+  }
+  .results-card h3 { margin-bottom: 12px; text-align: left; }
+
+  .table-shell { overflow: hidden; border: 1px solid #dce6f2; border-radius: 12px; }
+  table.compact-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 0; }
+  .compact-table th, .compact-table td { border: 1px solid #e5e9f2; padding: 10px 12px; text-align: center; font-size: 14px; vertical-align: middle; }
+  .compact-table th { background: linear-gradient(135deg, #2f7bfa 0%, #1f62d0 100%); color: #fff; font-weight: 700; }
+  .compact-table tr:nth-child(even) { background-color: #f8fbff; }
+
+  .graph { text-align: center; margin-top: 0; }
+  .report-graph-card { padding: 18px; }
+  .tree-wrap {
+    width: 100%; overflow-x: auto; display: flex; justify-content: center;
+    background: linear-gradient(180deg, #f8fbfe 0%, #eef5fb 100%);
+    border: 1px solid #dde8f3; border-radius: 12px; padding: 16px;
+  }
+
+  .report-actions { display: flex; justify-content: flex-end; gap: 12px; max-width: 900px; margin: 28px auto 0; }
+  .print-btn, .download-btn {
+    padding: 12px 24px; font-size: 15px; border: none; border-radius: 30px; color: white;
+    cursor: pointer; transition: all 0.25s ease;
+  }
+  .print-btn { background: linear-gradient(to right, #2f7bfa, #1f62d0); }
+  .download-btn { background: linear-gradient(to right, #28a745, #1f8d38); }
+  .print-btn:hover, .download-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(31,45,61,0.12); }
+  .print-btn:disabled, .download-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  @media print {
+    .print-btn, .download-btn, .report-actions { display: none !important; }
+    body { margin: 0; padding: 0; background: #ffffff; }
+    .report-page { margin: 0 0 14px; padding: 24px 26px 22px; border: none; box-shadow: none; border-radius: 0; }
+  }
+</style>
+</head>
+<body id="report-root">
+  <div id="pdf-export-root">
+    <div class="report-page">
+      <div class="header-row">
+        <img src="images/IITLOGO.png" class="vl-logo" ">
+        <div class="report-title-block">
+          <p class="report-kicker"></p>
+          <h2>Virtual Labs Simulation Report</h2>
+        </div>
+        <img src="images/image.png" class="vl-logo" onerror="this.style.display='none'">
+      </div>
+
+      <div class="section report-overview">
+        <div class="report-overview-top">
+          <p class="badge">Image Processing Lab</p>
+          <p class="report-stamp">Generated on ${generatedOn}</p>
+        </div>
+        <p class="report-experiment-label">Experiment Title</p>
+        <p class="report-experiment-title">Huffman Coding for Lossless Image Compression</p>
+
+        <div class="info-grid">
+          <div class="info-card"><span class="label">Start Time:</span>${startLabel}</div>
+          <div class="info-card"><span class="label">End Time:</span>${endLabel}</div>
+          <div class="info-card"><span class="label">Total Time Spent:</span>${durationLabel}</div>
+        </div>
+
+      </div>
+
+      <div class="section">
+        <h2>Summary</h2>
+        <h3>Aim</h3>
+        <p>To study Huffman Coding for lossless data compression by analyzing symbol frequencies, constructing the Huffman tree, and generating optimal prefix codes.</p>
+        <h3>Simulation Summary</h3>
+        <p>The ${inputMode === 'symbol' ? 'selected symbol' : 'entered text'} was analyzed for symbol frequencies, a Huffman tree was constructed, and binary codes were assigned. The original data required ${stats.originalSizeBits} bits, while the Huffman-encoded data required only ${stats.compressedSizeBits} bits &mdash; a space saving of ${stats.spaceSaved.toFixed(1)}%.</p>
+        <h3>Components and Key Parameters</h3>
+        <ul class="two-column-list">
+          <li>Input Mode: ${inputMode === 'symbol' ? 'Symbol' : 'Text'}</li>
+          <li>Input Data: ${inputLabel}</li>
+          <li>Total Symbols: ${stats.totalSymbols}</li>
+          <li>Unique Symbols: ${encodedTable.length}</li>
+          <li>Original Size: ${stats.originalSizeBits} bits</li>
+          <li>Compressed Size: ${stats.compressedSizeBits} bits</li>
+          <li>Bits Saved: ${savedBits} bits</li>
+          <li>Space Saved: ${stats.spaceSaved.toFixed(1)}%</li>
+        </ul>
+      </div>
+      ${testsSectionHtml}
+    </div>
+
+    <div class="report-page report-page--results">
+      <div class="section results-section">
+        <h2>Results</h2>
+        <div class="results-stack">
+          <div class="results-card">
+            <h3>Frequency & Code Table</h3>
+            <div class="table-shell">
+              <table class="compact-table">
+                <thead>
+                  <tr><th>Character</th><th>Frequency</th><th>Code</th><th>Code Length</th></tr>
+                </thead>
+                <tbody>
+                  ${freqRows}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="graph report-graph-card results-card">
+            <h3>Huffman Tree</h3>
+            <div class="tree-wrap">
+              ${treeSvg}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-actions">
+    <button class="download-btn" onclick="downloadPdfReport(this)">⬇ DOWNLOAD</button>
+    <button class="print-btn" onclick="window.print()">PRINT</button>
+  </div>
+
+  <script>
+    function downloadPdfReport(btn) {
+      if (typeof html2pdf === 'undefined') {
+        alert('PDF library abhi load ho rahi hai, thoda ruk kar dubara try karein.');
+        return;
+      }
+      btn.disabled = true;
+      var originalText = btn.textContent;
+      btn.textContent = 'Preparing PDF...';
+
+      html2pdf()
+        .set({
+          margin: 10,
+          filename: 'huffman_simulation_report_' + Date.now() + '.pdf',
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css'], avoid: '.report-page' }
+        })
+        .from(document.getElementById('pdf-export-root'))
+        .save()
+        .then(function () {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        })
+        .catch(function (err) {
+          console.error('PDF generation failed:', err);
+          alert('PDF banane mein error aayi: ' + err.message);
+          btn.disabled = false;
+          btn.textContent = originalText;
+        });
+    }
+  </script>
+</body>
+</html>`;
+}
+
+function sendSimulationReport(ctx) {
+  console.log("sendSimulationReport called, window.opener:", window.opener);
+  if (!window.opener && window.parent === window) return; // no parent/opener to receive it
+
+  const stats = computeReportStats();
+  const reportHtml = buildReportHtmlString({
+    inputMode: ctx.inputMode,
+    image: ctx.image,
+    tdata: ctx.tdata,
+    encodedTable: ctx.encodedTable,
+    stats,
+    timing: {
+      startTime: ctx.startTime,
+      endTime: ctx.endTime
+    },
+    preTest: ctx.preTest,
+    postTest: ctx.postTest
+  });
+
+  const updatedAt = String(Date.now());
+
+  try {
+    localStorage.setItem("vlab_exp2_simulation_report_html", reportHtml);
+    localStorage.setItem("vlab_exp2_simulation_report_updated_at", updatedAt);
+  } catch (e) {
+    console.error("Failed to persist simulation report to localStorage:", e);
+  }
+
+  try {
+    window.parent.postMessage({
+      type: 'vlab:simulation_report_generated',
+      html: reportHtml,
+      updatedAt
+    }, "*");
+  } catch (e) {
+    console.error("postMessage to parent failed:", e);
+  }
+
+  // Popup-window fallback (when this component runs in a window.open'd tab
+  // instead of an iframe) — same event, same string-timestamp format so
+  // progressreport.html's Number(value) parsing stays consistent either way.
+  if (window.opener) {
+    try {
+      window.opener.postMessage({
+        type: 'vlab:simulation_report_generated',
+        html: reportHtml,
+        updatedAt
+      }, "*");
+    } catch (e) {
+      console.error("postMessage to opener failed:", e);
+    }
+  }
+}
+
+    // ---------- Download Report button handler (in-simulation) ----------
+    function handleDownloadReport(){
+      if (!encodedTable || encodedTable.length === 0) return;
+      const stats = computeReportStats();
+      const reportHtml = buildReportHtmlString({
+        inputMode, image, tdata, encodedTable, stats,
+        timing: {
+          startTime: experimentStartRef.current,
+          endTime: experimentEndRef.current
+        },
+        preTest: preTestResult,
+        postTest: postTestResult
+      });
+
+      // Use a hidden iframe (not a bare div) so the report's own <style> tag
+      // is actually applied — assigning the full HTML string to a div's
+      // innerHTML silently strips <html>/<head>/<style>, which caused the
+      // earlier "unstyled PDF" issue.
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.left = '-99999px';
+      iframe.style.top = '0';
+      iframe.style.width = '900px';
+      iframe.style.height = '1400px';
+      iframe.style.border = 'none';
+      document.body.appendChild(iframe);
+
+      iframe.onload = () => {
+        try {
+          const doc = iframe.contentDocument;
+          const root = doc.getElementById('pdf-export-root');
+          if (!root) {
+            document.body.removeChild(iframe);
+            return;
+          }
+          html2pdf()
+            .set({
+              margin: 10,
+              filename: `huffman_simulation_report_${Date.now()}.pdf`,
+              image: { type: 'jpeg', quality: 0.98 },
+              html2canvas: { scale: 2, useCORS: true },
+              jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
+              pagebreak: { mode: ['css'], avoid: '.report-page' }
+            })
+            .from(root)
+            .save()
+            .then(() => document.body.removeChild(iframe))
+            .catch((err) => {
+              console.error('PDF generation failed:', err);
+              document.body.removeChild(iframe);
+            });
+        } catch (err) {
+          console.error('PDF generation failed:', err);
+          document.body.removeChild(iframe);
+        }
+      };
+
+      iframe.srcdoc = reportHtml;
+    }
 
     function handleNextStep(){
         if(currentStep >= steps.length - 1){
             setIsComplete(true);
+            experimentEndRef.current = Date.now();
             if(onTreeComplete) onTreeComplete();
+            sendSimulationReport({
+                inputMode, image, tdata, encodedTable,
+                startTime: experimentStartRef.current,
+                endTime: experimentEndRef.current,
+                preTest: preTestResult,
+                postTest: postTestResult
+            });
             return;
         }
         const next = currentStep + 1;
@@ -425,7 +981,7 @@ export default function HuffmanAnimation({
           onSymbolSelected(x);
       }
     }
-    
+
     return(
         <OpenCvProvider>
         <div id="main-box-temp">
@@ -690,6 +1246,8 @@ export default function HuffmanAnimation({
                     setFrequencyData([]);
                     setTdata('');
                     setShowEdgeExplanation(false);
+                    experimentStartRef.current = Date.now();
+                    experimentEndRef.current = null;
                     if(onReset) onReset();
                 }}
                 disabled={frequencyData.length === 0}
@@ -883,6 +1441,23 @@ export default function HuffmanAnimation({
                 </tbody>
             </table>
         </div>
+
+        <button
+            onClick={handleDownloadReport}
+            style={{
+                marginTop: '14px',
+                padding: '10px 22px',
+                background: '#1d2a6d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '999px',
+                fontWeight: 700,
+                fontSize: '13px',
+                cursor: 'pointer'
+            }}
+        >
+            ⬇ Download Report
+        </button>
         </div>
         
         </>

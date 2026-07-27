@@ -33,9 +33,10 @@ import "react-toastify/dist/ReactToastify.css";
 
 import HuffmanAnimation from "./HuffmanAnimation";
 
-import { OpenCvProvider } from "opencv-react";
+import { OpenCvProvider, useOpenCv } from "opencv-react";
 import zIndex from "@mui/material/styles/zIndex";
 import HuffmanConceptTutor from './HuffmanConceptTutor';
+import { generateLossyHuffmanReport } from "./HuffmanreportGenerator";
 
 //returns a tab panel
 function TabPanel(props) {
@@ -167,7 +168,22 @@ function TutorBubble({text, targetRef, visible}) {
     </div>
   );
 }
+
+// Outer wrapper: this is the component you import elsewhere.
+// It just sets up the OpenCvProvider "room" and renders the real
+// page component INSIDE it, so useOpenCv() below can pick up the
+// OpenCV-ready signal from context.
 export default function HuffmanPage() {
+  return (
+    <OpenCvProvider>
+      <HuffmanPageInner />
+    </OpenCvProvider>
+  );
+}
+
+// Inner component: all the original logic lives here, unchanged,
+// except cv now comes from useOpenCv() instead of window.cv.
+function HuffmanPageInner() {
   const myProcess2Button = useRef(null);
 
   const notifyE = (msg) => {
@@ -208,7 +224,9 @@ export default function HuffmanPage() {
 
  
 
-  const cv = window.cv;
+  // cv now comes from the OpenCV React context, which correctly
+  // reflects when the WASM module has actually finished loading.
+  const { cv, loaded: isCvLoaded } = useOpenCv();
   const [mrl, setMrl] = useState("");
   const [qfactor, setQfactor] = useState("");
   const [quality, setQuality] = useState("");
@@ -284,6 +302,14 @@ export default function HuffmanPage() {
   }
 
   function lossyHuffmanEncode() {
+    // Guard: don't try to touch cv.* until OpenCV.js has actually
+    // finished loading in the browser, otherwise cv is undefined
+    // and cv.imread(...) throws "Cannot read properties of undefined".
+    if (!isCvLoaded || !cv) {
+      notifyE("OpenCV is still loading, please wait a moment and try again.");
+      return;
+    }
+
     const imgElement = document.getElementById("inputImage");
 
     if (selectedImage === null || !imgElement) {
@@ -323,6 +349,12 @@ export default function HuffmanPage() {
     cv.hconcat(images, merged);
     cv.imshow("outputCanvas", merged);
 
+    // Grab quantized pixel bytes BEFORE deleting the Mat — the report
+    // generator needs raw grayscale data to build the real histogram.
+    const quantizedPixelData = Uint8Array.from(quantized.data);
+    const quantizedWidth = quantized.cols;
+    const quantizedHeight = quantized.rows;
+
     // Cleanup
     src.delete();
     quantized.delete();
@@ -338,7 +370,15 @@ export default function HuffmanPage() {
       setIsAnimationPlaying(false);
     }, 1000);
     notifyS("Process Completed !!");
-    // myProcess2Button.current.disabled=true
+
+    generateLossyHuffmanReport({
+      pixelData: quantizedPixelData,
+      width: quantizedWidth,
+      height: quantizedHeight,
+      qfactor,
+      imageName: imageName || "Sample Image",
+      lossyCompressionRatio: compressionRatio,
+    });
   }
 
   const [rleresult, setRleresult] = useState(null);
@@ -613,7 +653,7 @@ const speakStep = () => {
 
   if (step.ref?.current) {
     step.ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
-  }cd
+  }
 
   
   setTimeout(() => {
@@ -1024,7 +1064,6 @@ const getArrowStyle = (placement) => {
 };
 
   return (
-    <OpenCvProvider>
       <div id="main-box">
         <div id="bottom-footer"> &copy; 2025 Virtual Labs, IIT Roorkee</div>
 
@@ -2051,6 +2090,5 @@ const getArrowStyle = (placement) => {
           </TabPanel>
         </div>
       </div>
-    </OpenCvProvider>
   );
 }

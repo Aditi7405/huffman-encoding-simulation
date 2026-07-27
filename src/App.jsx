@@ -3,7 +3,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import React from "react";
 import { OpenCvProvider } from "opencv-react";
 import {
-  createBrowserRouter,
+  createHashRouter,
   RouterProvider,
   Navigate,
 } from "react-router-dom";
@@ -14,7 +14,7 @@ import ErrorPage from "./components/ErrorPage";
 import HuffmanPage from "./components/HuffmanPage";
 
 function App() {
-  const router = createBrowserRouter([
+  const router = createHashRouter([
     {
       path: "/",
       element: <HuffmanPage />,

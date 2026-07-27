@@ -242,7 +242,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
       title: "Tree Description",
       text: "Below the tree visualization, you can read a step-by-step description of what is happening - which nodes are being selected, merged, and how the edge labels 0 and 1 form the binary path from root to each leaf character.",
       ref: treeDescriptionRef,
-      placement: "left-start",
+      placement: "bottom-start",
     },
     {
       title: "Encoded Table",
