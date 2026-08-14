@@ -258,6 +258,7 @@ function HuffmanPageInner() {
   const [tourPlacement, setTourPlacement] = useState("bottom-end");
   const [actionRequiredShown, setActionRequiredShown] = useState(false);
   const [isSpeechEnabled, setIsSpeechEnabled] = useState(true);
+  const [hoveredNavBtn, setHoveredNavBtn] = useState(null);
  
    
   function calculateEntropyMap(srcGray) {
@@ -714,79 +715,83 @@ const speakStep = () => {
   const tourSteps = [
   {
     title: "Guided Tutor",
-    text: "Welcome to the Lossy Huffman Encoding Experiment! This guided tour will walk you through each component of the interface, ensuring you are fully equipped to perform the experiment with confidence.",
+    text:  "Welcome to the Lossy Huffman Encoding experiment. This simulation demonstrates how Huffman Coding compresses image data by using frequency-based binary codes to represent pixel values efficiently.",
     refKey: "guidedTutor",
     placement: "bottom-end",
   },
   {
-    title: "Instruction Button",
-    text: "The Instructions panel outlines the complete experimental procedure in a structured format. Refer to it anytime you need clarification on the workflow or sequence of steps.",
+    title: "Read Instructions",
+    text: "Click here to view detailed step-by-step instructions about how this experiment works and how to perform each operation correctly.",
     refKey: "instruction",
     placement: "bottom-end",
   },
   {
-    title: "Speech box",
-    text: "Use this button to toggle audio narration on or off. When active, the guided tutor will vocally explain each step as you progress through the experiment.",
+    title: "Sound Mute or Unmute",
+    text: "Use this button to mute or unmute the guided audio explanation at any time during the experiment.",
     refKey: "speech",
     placement: "bottom-start",
   },
   {
-    title:"Tool Panel",
-    text: "This is the Lossy Huffman Tools panel — your central workspace. It houses all the controls and utilities required to configure and execute the compression experiment.",
-    refKey: "toolbox",
-    placement: "bottom-start",
-  },
-  {
-    title: "Image Box",
-    text: "Select a sample image from the provided options to use as your input. The chosen image will serve as the source data for the Huffman compression process.",
+    title: "Select Image",
+    text: "Start by selecting a sample image from the available options. The selected image will be used as the input data for Huffman Coding analysis.",
     refKey: "chooseImage",
     placement: "right-start",
   },
   {
     title:"Upload Button",
-    text: "Prefer a custom input? Use the Upload File button to import your own image directly into the experiment for personalized compression analysis.",
+    text: "Alternatively, you may also upload your own image to observe how different image patterns and pixel distributions affect symbol frequencies and Huffman coding efficiency.",
     refKey: "upload",
     placement: "right-start",
   },
   {
-    title: "Input Image Box",
-    text: "This section displays the selected or uploaded image prior to processing. Verify your input here before proceeding to the compression stage.",
+    title: "Input Image",
+    text:  "This section displays the selected or uploaded image before processing. Verify that the correct input image has been selected before proceeding with the Huffman Coding analysis.",
     refKey: "inputImage",
     placement: "bottom-start",
   },
   {
     title: "Quantization Value",
-    text: "Enter a valid Quantization Factor to define the degree of lossy compression. A higher value results in greater compression at the cost of image fidelity.",
+    text: "Enter a valid Quantization Factor to control the level of pixel-value reduction before the compression analysis. The selected value affects the number and distribution of grayscale values used for encoding.",
     refKey: "quantization",
     requiresInput: true,
     placement: "bottom-start",
   },
   {
-    title: "Process Button",
-    text: "Once your image and quantization factor are configured, click Process to execute the Huffman compression algorithm and generate the encoded output.",
+    title: "Process Image",
+    text: "Click the Process button to execute the Huffman-based image compression",
     refKey: "process",
     placement: "bottom-start",
   },
   {
-    title: "Output Box",
-    text: "The processed output image, entropy maps, and compression ratio are rendered here. Analyze these results to evaluate the efficiency of the applied compression.",
+    title: "Observe Output Analysis",
+    text: "The output panel displays three results generated after processing the selected image. The first section shows the entropy map, which represents the local information content and pixel variation in the image. Higher entropy indicates greater pixel variation and less predictability, while lower entropy indicates more uniform and predictable regions.",
     refKey: "output",
     placement: "bottom-start",
   },
   {
-    title: "Print Button",
-    text: "Use the Print button to export or save the generated compression results for documentation or further analysis.",
+    text: "The second section shows the entropy map after compression, allowing you to compare the information distribution before and after the compression process. ",
+    refKey: "output",
+    placement: "bottom-start",
+  },
+  {
+   text: "The third section displays the compressed image generated from the processed image data. Observe and compare all three results to understand how Huffman Coding uses the frequency of pixel values to reduce redundant information and achieve efficient lossless compression while preserving the original image information.",
+    refKey: "output",
+    placement: "bottom-start", 
+  },
+  {
+    title: "Print Results",
+    text: "Click the Print button to save or document the experimental observations and compression results. ",
     refKey: "print",
     placement: "bottom-start",
   },
   {
-    title:"Concept Button",
-    text: "Click the Concept button to explore an interactive step-by-step animation that illustrates the theoretical foundation of Huffman Encoding in depth.",
+    title:"Explore Concept",
+    text:  "Must Click the Concept button to explore the Huffman Coding visualization and understand the complete process, including frequency analysis, Huffman Tree construction, node merging, binary code generation, and encoding.",
     refKey: "concept",
     placement: "bottom-end",
   },
   {
-    text: "You have successfully completed the guided walkthrough of the Lossy Huffman Encoding Experiment. All components are now at your disposal — begin your experiment and explore the power of data compression!",
+    text:  "You have successfully completed the guided walkthrough of the Huffman Coding for Lossless Image Compression experiment. You can now perform the experiment, analyze the compression results, and explore the Huffman Coding concept in detail.",
     refKey: "concept",
     placement: "bottom-end",
   },
@@ -1156,6 +1161,9 @@ const getArrowStyle = (placement) => {
             className="guided-tutor-btn"
             style={{
               ...getHighlightStyle("guidedTutor"),
+              color: "#1d2a6d",
+              backgroundcolor: "#ffd700",
+              fontWeight: "bold",
             }}
             onClick={() => { 
               if (isTourPlaying || tourStep >= 0) {
@@ -1316,11 +1324,11 @@ const getArrowStyle = (placement) => {
     }}/>
     <Paper elevation={6} sx={{
       width: '320px',
-      background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
+      background: '#f5fffa',
       borderRadius: '12px',
       padding: '12px',
       boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-      border: '2px solid #1d2a6d',
+      border: '2px solid #ffd700',
       position: 'relative',
       zIndex: 1,
     }}>
@@ -1331,30 +1339,34 @@ const getArrowStyle = (placement) => {
         right: '22px',
         width: '16px',
         height: '16px',
-        background: 'rgb(219,234,254)',
+        background: '#f5fffa',
         transform: 'rotate(45deg)',
-        borderTop: '2px solid #1d2a6d',
-        borderLeft: '2px solid #1d2a6d',
+        borderTop: '2px solid #ffd700',
+        borderLeft: '2px solid #ffd700',
         zIndex: 2,
       }}/>
 
       <div style={{
     textAlign: 'center',
     fontSize: '16px',
-    fontWeight: '700',
-    color: '#1d2a6d',
-    marginBottom: '12px',
+    fontWeight: 'bold !important',
+    color: 'hsl(223, 87%, 25%)',
+    marginBottom: '8px',
     borderBottom: '1px solid #cbd5e1',
     paddingBottom: '8px',
+    width: "100%",
+    display: "inline-block",
   }}>
     Guided Tutor is here to help!
   </div>
 
       <p style={{
-        fontSize: '14px',
+        fontSize: '0.95rem',
         color: '#444',
-        marginBottom: '18px',
-        lineHeight: '1.5',
+        marginBottom: '15px',
+        lineHeight: '1.4',
+        width: '100%',
+        textAlign: 'justify',
       }}>
         Welcome, Do you want Guided Tutor to give you proper guide how to run the simulation?
       </p>
@@ -1431,11 +1443,11 @@ const getArrowStyle = (placement) => {
 
     <Paper elevation={6} sx={{
       width: '320px',
-      background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
+      background: '#f5fffa',
       borderRadius: '18px',
       padding: '16px',
       boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-      border: '2px solid #1d2a6d',
+      border: '2px solid #ffd700',
       position: 'relative',
       zIndex: 1,
     }}>
@@ -1455,13 +1467,13 @@ const getArrowStyle = (placement) => {
 
   width: '16px',
   height: '16px',
-  background: 'rgb(219,234,254)',
+  background: '#f5fffa',
   transform: 'rotate(45deg)',
 
-  ...(tourPlacement?.startsWith('bottom') && { borderTop: '2px solid #1d2a6d',    borderLeft: '2px solid #1d2a6d' }),
-  ...(tourPlacement?.startsWith('top')    && { borderBottom: '2px solid #1d2a6d', borderRight: '2px solid #1d2a6d' }),
-  ...(tourPlacement?.startsWith('right')  && { borderLeft: '2px solid #1d2a6d',   borderBottom: '2px solid #1d2a6d' }),
-  ...(tourPlacement?.startsWith('left')   && { borderRight: '2px solid #1d2a6d',  borderTop: '2px solid #1d2a6d' }),
+  ...(tourPlacement?.startsWith('bottom') && { borderTop: '2px solid #ffd700',    borderLeft: '2px solid #ffd700' }),
+  ...(tourPlacement?.startsWith('top')    && { borderBottom: '2px solid #ffd700', borderRight: '2px solid #ffd700' }),
+  ...(tourPlacement?.startsWith('right')  && { borderLeft: '2px solid #ffd700',   borderBottom: '2px solid #ffd700' }),
+  ...(tourPlacement?.startsWith('left')   && { borderRight: '2px solid #ffd700',  borderTop: '2px solid #ffd700' }),
 
   zIndex: 2,
 }}/>
@@ -1469,22 +1481,25 @@ const getArrowStyle = (placement) => {
       <div style={{
         textAlign: "center",
         fontSize: "16px",
-        fontWeight: "700",
-        color: "#1d2a6d",
-        marginBottom: "12px",
+        fontWeight: "bold !important",
+        color: "hsl(223, 87%, 25%)",
+        marginBottom: "8px",
         borderBottom: "1px solid ",
         paddingBottom: "8px",
+        display: "inline-block",
+        width: "100%",
       }}>
         {showActionRequired ? "⚠️ Action Required" : tourSteps[tourStep]?.title}
       </div>
 
       {/* Text */}
       <div style={{
-        fontSize: "14px",
-        color: "#333",
-        lineHeight: "1.6",
+        fontSize: "0.95rem",
+        color: "#444",
+        lineHeight: "1.4",
         fontWeight: "500",
         marginBottom: "18px",
+        textAlign: "justify",
       }}>
         {showActionRequired ? (
           (tourSteps[tourStep]?.refKey === "process"
@@ -1530,53 +1545,77 @@ const getArrowStyle = (placement) => {
         marginTop: "12px"
       }}>
         <div style={{ display: "flex", gap: "10px" }}>
-          <button onClick={stopTour} style={{
-            background: "transparent",
-            border: "1px solid #1d2a6d",
-            borderRadius: "10px",
-            padding: "8px 18px",
-            color: "#64748b",
-            fontWeight: "600",
-            cursor: "pointer",
-            fontSize: "14px",
-          }}>EXIT</button>
+          <button
+            onClick={stopTour}
+            onMouseEnter={() => setHoveredNavBtn("exit")}
+            onMouseLeave={() => setHoveredNavBtn(null)}
+            style={{
+              background: hoveredNavBtn === "exit" ? "#fee2e2" : "transparent",
+              border: `1px solid ${hoveredNavBtn === "exit" ? "#dc2626" : "#1d2a6d"}`,
+              borderRadius: "10px",
+              padding: "8px 18px",
+              color: hoveredNavBtn === "exit" ? "#dc2626" : "#64748b",
+              fontWeight: "600",
+              cursor: "pointer",
+              fontSize: "14px",
+              transition: "all 0.2s ease",
+              transform: hoveredNavBtn === "exit" ? "translateY(-2px)" : "translateY(0)",
+              boxShadow: hoveredNavBtn === "exit" ? "0 4px 10px rgba(220,38,38,0.25)" : "none",
+            }}
+          >
+            EXIT
+          </button>
 
           <button
             onClick={() => { setShowActionRequired(false); goToStep(tourStep - 1); }}
             disabled={tourStep === 0}
+            onMouseEnter={() => tourStep !== 0 && setHoveredNavBtn("prev")}
+            onMouseLeave={() => setHoveredNavBtn(null)}
             style={{
-              background: "#d1d5db",
+              background: hoveredNavBtn === "prev" && tourStep !== 0 ? "#b8c0cc" : "#d1d5db",
               color: "#1d2a6d",
               border: "1px solid #1d2a6d",
               padding: "8px 18px",
               borderRadius: "10px",
               cursor: tourStep === 0 ? "not-allowed" : "pointer",
               fontWeight: "600",
-              fontSize: "14px"
-            }}>Back</button>
+              fontSize: "14px",
+              transition: "all 0.2s ease",
+              transform: hoveredNavBtn === "prev" && tourStep !== 0 ? "translateY(-2px)" : "translateY(0)",
+              boxShadow: hoveredNavBtn === "prev" && tourStep !== 0 ? "0 4px 10px rgba(29,42,109,0.2)" : "none",
+            }}>Prev</button>
         </div>
 
         <button
           onClick={handleNextTourStep}
           disabled={false}
+          onMouseEnter={() => {
+            const isDisabled =
+              (tourSteps[tourStep]?.refKey === "quantization" && showActionRequired && (!qfactor || qfactor <= 0)) ||
+              (tourSteps[tourStep]?.refKey === "process" && !isImageProcessed);
+            if (!isDisabled) setHoveredNavBtn("next");
+          }}
+          onMouseLeave={() => setHoveredNavBtn(null)}
           style={{
           background: (
           (tourSteps[tourStep]?.refKey === "quantization" && showActionRequired && (!qfactor || qfactor <= 0)) ||
           (tourSteps[tourStep]?.refKey === "process" && !isImageProcessed)
-          ) ? "#9ca3af" : "#1d2a6d",
+          ) ? "#9ca3af" : (hoveredNavBtn === "next" ? "#2f3f8f" : "#1d2a6d"),
           color: "white",
           border: "none",
           padding: "8px 18px",
           borderRadius: "10px",
           minWidth: "80px",
-          textAlign: "center",
+          textAlign: "justify",
           cursor: (
           (tourSteps[tourStep]?.refKey === "quantization" && showActionRequired && (!qfactor || qfactor <= 0)) ||
           (tourSteps[tourStep]?.refKey === "process" && !isImageProcessed)
           ) ? "not-allowed" : "pointer",
           fontWeight: "600",
           fontSize: "14px",
-          transition: "all 0.3s ease",  
+          transition: "all 0.3s ease",
+          transform: hoveredNavBtn === "next" ? "translateY(-2px)" : "translateY(0)",
+          boxShadow: hoveredNavBtn === "next" ? "0 6px 14px rgba(29,42,109,0.35)" : "none",
           }}>
           {tourStep === tourSteps.length - 1 ? "Finish" : "Next"}
         </button>
@@ -1595,7 +1634,7 @@ const getArrowStyle = (placement) => {
         </div>
         <span style={{
           fontSize: '11px', color: '#888',
-          marginTop: '4px', display: 'block', textAlign: 'right'
+          marginTop: '4px', display: 'block', textAlign: 'justify',
         }}>
           {tourStep + 1} / {tourSteps.length}
         </span>

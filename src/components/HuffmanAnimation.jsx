@@ -11,6 +11,8 @@ import HuffmanTree from './hufftree';
 import HuffmanTreeViewer from './htimage';
 import Box from '@mui/material/Box';
 import html2pdf from 'html2pdf.js';
+import iitlogo from '../assets/images/IITLOGO.png';
+import vlabLogo from '../assets/images/image.png';
 
 class TreeErrorBoundary extends React.Component {
   constructor(props) {
@@ -198,7 +200,7 @@ export default function HuffmanAnimation({
   if(inputMode === 'symbol' && original){
     for (let row of original) {
       for (let cell of row) {
-        const key = cell === 1 ? "1" : "0";
+        const key = String(cell); // grayscale pixel value (0-255) used as the symbol
         freqMap[key] = (freqMap[key] || 0) + 1;
       }
     }
@@ -282,7 +284,7 @@ export default function HuffmanAnimation({
     }
     function computeReportStats() {
   const totalSymbols = frequencyData.reduce((sum, item) => sum + item.freq, 0);
-  const originalBitsPerSymbol = inputMode === 'symbol' ? 1 : 8; // bitmap = 1 bit/pixel, text = 8 bits/char (ASCII)
+  const originalBitsPerSymbol = 8; // grayscale pixel (0-255) = 8 bits/pixel, text = 8 bits/char (ASCII)
   const originalSizeBits = totalSymbols * originalBitsPerSymbol;
 
   const compressedSizeBits = encodedTable.reduce((sum, item) => {
@@ -315,6 +317,45 @@ function escapeHTMLForReport(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[c]));
+}
+
+function getActiveUserHash() {
+  try {
+    return localStorage.getItem("vlab_exp2_active_user_hash");
+  } catch (e) {
+    return null;
+  }
+}
+
+function getStoredTestResult(type) {
+  try {
+    const activeHash = getActiveUserHash();
+    const candidates = [];
+    if (activeHash) {
+      candidates.push({
+        score: `vlab_exp2_user_${activeHash}_${type}_score`,
+        total: `vlab_exp2_user_${activeHash}_${type}_total`
+      });
+    }
+    candidates.push({
+      score: `vlab_exp2_${type}_score`,
+      total: `vlab_exp2_${type}_total`
+    });
+
+    for (const c of candidates) {
+      const score = localStorage.getItem(c.score);
+      const total = localStorage.getItem(c.total);
+      if (score === null || total === null) continue;
+      const scoreNum = Number(score);
+      const totalNum = Number(total);
+      if (Number.isNaN(scoreNum) || Number.isNaN(totalNum)) continue;
+      return { score: scoreNum, total: totalNum };
+    }
+    return null;
+  } catch (e) {
+    console.error(`Failed to read ${type} result from localStorage:`, e);
+    return null;
+  }
 }
 
 // ---------- timing helpers for the report (Start Time / End Time / Total Time Spent) ----------
@@ -422,21 +463,27 @@ function renderReportHuffmanTreeSVG(root) {
   }
   walk(root);
 
-  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${Math.max(220, height)}" xmlns="http://www.w3.org/2000/svg">${edges}${nodesSvg}</svg>`;
+  const maxDisplayWidth = 680;   // fits inside .report-page (900px) minus padding
+  const maxDisplayHeight = 520;  // leaves room for the "Huffman Tree" heading on the same PDF page
+  const fitScale = Math.min(maxDisplayWidth / width, maxDisplayHeight / height, 1);
+  const displayWidth = Math.round(width * fitScale);
+  const displayHeight = Math.round(height * fitScale);
+
+return `<svg viewBox="0 0 ${width} ${height}" width="${displayWidth}" height="${displayHeight}" style="max-width:100%; height:auto;" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">${edges}${nodesSvg}</svg>`;
 }
 
 function buildReportHtmlString({ inputMode, image, tdata, encodedTable, stats, timing, preTest, postTest }) {
-  const symbolLabels = ['Plus (+)', `Minus (${opGlyph("-")})`, 'Multiply (×)', 'Divide (÷)'];
+  const symbolLabels = ['Plus (+)', `Minus (${opGlyph("-")})`, 'Multiply (×)', 'Divide (÷)', 'Random Grayscale Image'];
   const inputLabel = inputMode === 'symbol'
     ? (symbolLabels[image] || 'Symbol')
     : `"${escapeHTMLForReport(tdata)}"`;
 
   const freqRows = encodedTable.map(item =>
     `<tr>
-      <td>${escapeHTMLForReport(item.char)}</td>
-      <td>${item.freq}</td>
-      <td><code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;">${item.code}</code></td>
-      <td>${item.code.length} bits</td>
+      <td data-label="Character">${escapeHTMLForReport(item.char)}</td>
+      <td data-label="Frequency">${item.freq}</td>
+      <td data-label="Code"><code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;">${item.code}</code></td>
+      <td data-label="Code Length">${item.code.length} bits</td>
     </tr>`
   ).join('');
 
@@ -483,116 +530,188 @@ function buildReportHtmlString({ inputMode, image, tdata, encodedTable, stats, t
 <html>
 <head>
 <meta charset="UTF-8">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
-    background: linear-gradient(180deg, #eef4fb 0%, #f7f9fc 100%);
+    background: #eef4fb;
     color: #1f2d3d;
     margin: 0;
-    padding: 30px 22px 44px;
+    padding: 0;
     line-height: 1.65;
+    overflow-x: hidden;
   }
+  #report-viewport {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+#report-scale-inner {
+  width: 944px;
+  transform-origin: top left;
+  padding: 30px 22px 44px;
+  box-sizing: border-box;
+}
   .report-page {
+    width: 100%;
     max-width: 900px;
-    margin: 0 auto 24px;
-    padding: 34px 34px 30px;
+    margin: 0 auto 16px;
+    padding: 26px 28px 22px;
     background-color: #ffffff;
     border-radius: 18px;
-    border: 1px solid #dfe7f1;
-    box-shadow: 0 18px 38px rgba(23, 50, 77, 0.12);
     box-sizing: border-box;
   }
   .report-page:last-of-type { margin-bottom: 0; }
   h1, h2, h3 { color: #1f2d3d; margin-top: 0; font-weight: 700; }
   h2 { font-size: 23px; margin-bottom: 16px; color: #243b53; }
   h3 { font-size: 17px; margin-bottom: 10px; color: #2d4b68; }
-  p { margin: 0 0 12px; }
+  p { margin: 0 0 12px; font-size: 15px; }
   li { margin-bottom: 6px; }
 
   .header-row {
-    display: grid;
-    grid-template-columns: 108px 1fr 108px;
+    display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 20px;
     margin-bottom: 24px;
+    flex-wrap: wrap;
   }
-  .vl-logo { height: 84px; width: auto; max-width: 120px; object-fit: contain; flex-shrink: 0; justify-self: center; }
-  .report-title-block { text-align: center; margin: 0; padding-bottom: 14px; border-bottom: 3px solid #2f7bfa; }
+  .vl-logo { height: 60px; width: 78px; object-fit: contain; flex-shrink: 0; }
+  .report-title-block { flex: 1 1 220px; min-width: 0; text-align: center; margin: 0; padding-bottom: 14px; border-bottom: 3px solid #2f7bfa; }
   .report-kicker { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #5d7794; font-weight: 700; }
   .report-subtitle { margin: 8px 0 0; font-size: 14px; color: #5c6f84; }
 
-  .report-overview-top { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 12px; }
+  .report-overview-top { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
   .badge { margin: 0; padding: 8px 14px; border-radius: 20px; background: #e8f1ff; color: #1f62d0; font-weight: 600; font-size: 13px; }
   .report-stamp { margin: 0; padding: 8px 12px; border-radius: 999px; background: #ffffff; border: 1px solid #dce5ef; color: #50657c; font-size: 13px; font-weight: 600; }
   .report-experiment-label { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #60778f; font-weight: 700; }
-  .report-experiment-title { margin: 0 0 18px; font-size: 25px; line-height: 1.3; font-weight: 700; color: #16324b; }
+  .report-experiment-title { margin: 0 0 18px; font-size: 25px; line-height: 1.3; font-weight: 700; color: #16324b; overflow-wrap: break-word; }
 
-  .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 12px; }
+  .info-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 12px;
+  }
   .info-card {
     background: #fff; border: 1px solid #e5e9f2; border-radius: 10px; padding: 12px 14px;
-    box-shadow: 0 4px 10px rgba(31,45,61,0.05); font-size: 14px; min-height: 60px;
+    font-size: 14px; min-height: 60px; box-sizing: border-box;
+    flex: 1 1 150px; min-width: 130px;
     display: flex; flex-direction: column; justify-content: center; gap: 4px;
   }
   .label { font-weight: 600; color: #1f2d3d; display: block; margin-bottom: 2px; }
 
   .section {
-    background: linear-gradient(180deg, #f9fbfe 0%, #f4f7fb 100%);
+    background-color: #f6f9fc;
     padding: 22px 24px; margin-bottom: 24px; border-radius: 14px;
-    border: 1px solid #e0e8f2; box-shadow: 0 6px 16px rgba(31,45,61,0.05);
+    border: 1px solid #e0e8f2;
   }
   .section:last-child { margin-bottom: 0; }
 
-  ul.two-column-list { column-count: 2; column-gap: 40px; list-style: disc; padding-left: 20px; margin-top: 10px; }
+  ul.two-column-list {
+    display: flex;
+    flex-wrap: wrap;
+    list-style: disc;
+    padding-left: 20px;
+    margin-top: 10px;
+    gap: 4px 24px;
+  }
+  ul.two-column-list li {
+    flex: 0 1 220px;
+    min-width: 180px;
+    max-width: 100%;
+    box-sizing: border-box;
+    word-break: normal;
+    overflow-wrap: break-word;
+    font-size: 15px;
+  }
 
-  .results-stack { display: grid; gap: 18px; }
+  .results-stack > * + * { margin-top: 18px; }
+
   .results-card {
     background: #ffffff; border: 1px solid #dde6f0; border-radius: 14px; padding: 18px;
-    box-shadow: 0 4px 12px rgba(31,45,61,0.05);
+    box-sizing: border-box;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
   .results-card h3 { margin-bottom: 12px; text-align: left; }
 
-  .table-shell { overflow: hidden; border: 1px solid #dce6f2; border-radius: 12px; }
-  table.compact-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 0; }
+  .table-shell {
+    overflow-x: auto; overflow-y: hidden; border: 1px solid #dce6f2; border-radius: 12px; -webkit-overflow-scrolling: touch;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  table.compact-table { width: 100%; min-width: 420px; border-collapse: collapse; table-layout: fixed; margin-top: 0; }
   .compact-table th, .compact-table td { border: 1px solid #e5e9f2; padding: 10px 12px; text-align: center; font-size: 14px; vertical-align: middle; }
-  .compact-table th { background: linear-gradient(135deg, #2f7bfa 0%, #1f62d0 100%); color: #fff; font-weight: 700; }
+  .compact-table th { background-color: #1f62d0; color: #fff; font-weight: 700; }
   .compact-table tr:nth-child(even) { background-color: #f8fbff; }
 
   .graph { text-align: center; margin-top: 0; }
   .report-graph-card { padding: 18px; }
+
   .tree-wrap {
-    width: 100%; overflow-x: auto; display: flex; justify-content: center;
-    background: linear-gradient(180deg, #f8fbfe 0%, #eef5fb 100%);
+    width: 100%; overflow-x: auto; overflow-y: visible; box-sizing: border-box; display: flex; justify-content: center;
+    background-color: #eef5fb;
     border: 1px solid #dde8f3; border-radius: 12px; padding: 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tree-wrap svg {
+    max-width: 100%; height: auto; display: block;
   }
 
-  .report-actions { display: flex; justify-content: flex-end; gap: 12px; max-width: 900px; margin: 28px auto 0; }
+  .report-actions { 
+  display: flex; 
+  flex-wrap: wrap; 
+  justify-content: flex-end; 
+  gap: 12px; 
+  max-width: 900px; 
+  margin: 30px auto 10px; 
+  padding: 0 22px; 
+}
   .print-btn, .download-btn {
-    padding: 12px 24px; font-size: 15px; border: none; border-radius: 30px; color: white;
+    flex: 0 1 140px; min-width: 0;
+    padding: 10px 18px; font-size: 14px; border: none; border-radius: 30px; color: white;
     cursor: pointer; transition: all 0.25s ease;
   }
-  .print-btn { background: linear-gradient(to right, #2f7bfa, #1f62d0); }
-  .download-btn { background: linear-gradient(to right, #28a745, #1f8d38); }
-  .print-btn:hover, .download-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(31,45,61,0.12); }
+  .print-btn { background-color: #1f62d0; }
+  .download-btn { background-color: #1f8d38; }
+  .print-btn:hover, .download-btn:hover { transform: translateY(-2px); }
   .print-btn:disabled, .download-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
   @media print {
     .print-btn, .download-btn, .report-actions { display: none !important; }
     body { margin: 0; padding: 0; background: #ffffff; }
-    .report-page { margin: 0 0 14px; padding: 24px 26px 22px; border: none; box-shadow: none; border-radius: 0; }
+    .report-page { margin: 0 0 14px; padding: 24px 26px 22px; border: none !important; border-radius: 0 !important; box-shadow: none !important; }
+
+    @media print {
+  #report-scale-inner {
+    transform: none !important;
+    width: 100% !important;
+  }
+  #report-viewport {
+    height: auto !important;
+    width: 100% !important;
+  }
+}
   }
 </style>
 </head>
 <body id="report-root">
+  <div id="report-viewport">
+  <div id="report-scale-inner">
   <div id="pdf-export-root">
-    <div class="report-page">
+   <div class="report-page">
       <div class="header-row">
-        <img src="images/IITLOGO.png" class="vl-logo" ">
+        <img src="${iitlogo}" class="vl-logo" onerror="this.style.display='none'">
         <div class="report-title-block">
           <p class="report-kicker"></p>
           <h2>Virtual Labs Simulation Report</h2>
         </div>
-        <img src="images/image.png" class="vl-logo" onerror="this.style.display='none'">
+        <img src="${vlabLogo}" class="vl-logo" onerror="this.style.display='none'">
       </div>
 
       <div class="section report-overview">
@@ -608,19 +727,18 @@ function buildReportHtmlString({ inputMode, image, tdata, encodedTable, stats, t
           <div class="info-card"><span class="label">End Time:</span>${endLabel}</div>
           <div class="info-card"><span class="label">Total Time Spent:</span>${durationLabel}</div>
         </div>
-
       </div>
 
       <div class="section">
         <h2>Summary</h2>
         <h3>Aim</h3>
-        <p>To study Huffman Coding for lossless data compression by analyzing symbol frequencies, constructing the Huffman tree, and generating optimal prefix codes.</p>
+        <p>To study Huffman Coding as a lossless image compression technique by analyzing pixel-value frequencies, constructing a Huffman tree, generating prefix codes, and evaluating compression efficiency. </p>
         <h3>Simulation Summary</h3>
-        <p>The ${inputMode === 'symbol' ? 'selected symbol' : 'entered text'} was analyzed for symbol frequencies, a Huffman tree was constructed, and binary codes were assigned. The original data required ${stats.originalSizeBits} bits, while the Huffman-encoded data required only ${stats.compressedSizeBits} bits &mdash; a space saving of ${stats.spaceSaved.toFixed(1)}%.</p>
+        <p>The ${inputMode === 'symbol' ? 'selected symbol' : 'entered text'} was analyzed to determine the frequency of its pixel values. A Huffman tree was constructed based on these frequencies, and prefix codes were assigned to the pixel values. The encoded representation was then analyzed to determine the reduction in data size and the effectiveness of Huffman-based lossless compression. The original data required ${stats.originalSizeBits} bits, while the Huffman-encoded data required only ${stats.compressedSizeBits} bits &mdash; a space saving of ${stats.spaceSaved.toFixed(1)}%.</p>
         <h3>Components and Key Parameters</h3>
         <ul class="two-column-list">
-          <li>Input Mode: ${inputMode === 'symbol' ? 'Symbol' : 'Text'}</li>
-          <li>Input Data: ${inputLabel}</li>
+          <li >Input Mode: ${inputMode === 'symbol' ? 'Symbol' : 'Text'}</li>
+          <li style="min-width:180px; word-break:normal; overflow-wrap:break-word;">Input Data: <span style="word-break:break-word; overflow-wrap:anywhere;">${inputLabel}</span></li>
           <li>Total Symbols: ${stats.totalSymbols}</li>
           <li>Unique Symbols: ${encodedTable.length}</li>
           <li>Original Size: ${stats.originalSizeBits} bits</li>
@@ -629,10 +747,9 @@ function buildReportHtmlString({ inputMode, image, tdata, encodedTable, stats, t
           <li>Space Saved: ${stats.spaceSaved.toFixed(1)}%</li>
         </ul>
       </div>
-      ${testsSectionHtml}
-    </div>
 
-    <div class="report-page report-page--results">
+      ${testsSectionHtml}
+
       <div class="section results-section">
         <h2>Results</h2>
         <div class="results-stack">
@@ -649,7 +766,6 @@ function buildReportHtmlString({ inputMode, image, tdata, encodedTable, stats, t
               </table>
             </div>
           </div>
-
           <div class="graph report-graph-card results-card">
             <h3>Huffman Tree</h3>
             <div class="tree-wrap">
@@ -659,54 +775,177 @@ function buildReportHtmlString({ inputMode, image, tdata, encodedTable, stats, t
         </div>
       </div>
     </div>
-  </div>
-
+  </div> 
+  
   <div class="report-actions">
     <button class="download-btn" onclick="downloadPdfReport(this)">⬇ DOWNLOAD</button>
     <button class="print-btn" onclick="window.print()">PRINT</button>
   </div>
+  </div><!-- /#report-scale-inner -->
+  </div><!-- /#report-viewport -->
 
   <script>
-    function downloadPdfReport(btn) {
-      if (typeof html2pdf === 'undefined') {
-        alert('PDF library abhi load ho rahi hai, thoda ruk kar dubara try karein.');
-        return;
-      }
-      btn.disabled = true;
-      var originalText = btn.textContent;
-      btn.textContent = 'Preparing PDF...';
+    async function downloadPdfReport(btn) {
+  if (typeof html2canvas === 'undefined' || typeof (window.jspdf ? window.jspdf.jsPDF : window.jsPDF) === 'undefined') {
+    alert('PDF library abhi load ho rahi hai, thoda ruk kar dubara try karein.');
+    return;
+  }
+  btn.disabled = true;
+  var originalText = btn.textContent;
+  btn.textContent = 'Preparing PDF...';
 
-      html2pdf()
-        .set({
-          margin: 10,
-          filename: 'huffman_simulation_report_' + Date.now() + '.pdf',
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true },
-          jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['css'], avoid: '.report-page' }
-        })
-        .from(document.getElementById('pdf-export-root'))
-        .save()
-        .then(function () {
-          btn.disabled = false;
-          btn.textContent = originalText;
-        })
-        .catch(function (err) {
-          console.error('PDF generation failed:', err);
-          alert('PDF banane mein error aayi: ' + err.message);
-          btn.disabled = false;
-          btn.textContent = originalText;
-        });
+  var root = document.getElementById('pdf-export-root');
+  var scaleInner = document.getElementById('report-scale-inner');
+  var viewport = document.getElementById('report-viewport');
+
+  var previousTransform = scaleInner ? scaleInner.style.transform : '';
+  var previousViewportHeight = viewport ? viewport.style.height : '';
+  var previousViewportWidth = viewport ? viewport.style.width : '';
+  var previousViewportOverflow = viewport ? viewport.style.overflow : '';
+
+  if (scaleInner) scaleInner.style.transform = 'none';
+  if (viewport) {
+    viewport.style.height = 'auto';
+    viewport.style.width = '944px';
+    viewport.style.overflow = 'visible';
+  }
+
+  function restoreScale() {
+    if (scaleInner) scaleInner.style.transform = previousTransform;
+    if (viewport) {
+      viewport.style.height = previousViewportHeight;
+      viewport.style.width = previousViewportWidth;
+      viewport.style.overflow = previousViewportOverflow;
     }
+    if (window.__vlabFitReport) window.__vlabFitReport();
+  }
+
+  try {
+    const canvas = await html2canvas(root, {
+      scale: 3,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      windowWidth: 944,
+      windowHeight: root.scrollHeight,
+      scrollX: 0, scrollY: 0,
+    });
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.98);
+    const JsPDFCtor = window.jspdf ? window.jspdf.jsPDF : window.jsPDF;
+    const pdf = new JsPDFCtor({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    const usableWidth = pageWidth - margin * 2;
+    const usableHeight = pageHeight - margin * 2;
+
+    // --- smart break points: measure the boxes that must not be sliced ---
+    const avoidEls = Array.from(root.querySelectorAll('.results-card, .table-shell'));
+    const rootRect = root.getBoundingClientRect();
+    const scaleFactor = canvas.width / root.scrollWidth; // matches html2canvas 'scale'
+
+    const avoidRanges = avoidEls.map(el => {
+      const r = el.getBoundingClientRect();
+      return {
+        top: (r.top - rootRect.top) * scaleFactor,
+        bottom: (r.bottom - rootRect.top) * scaleFactor
+      };
+    }).sort((a, b) => a.top - b.top);
+
+    // Given a proposed break position (in canvas px), push it up to the
+    // start of any avoid-block it currently falls inside
+    function adjustBreak(breakY) {
+      for (const range of avoidRanges) {
+        if (breakY > range.top && breakY < range.bottom) {
+          return range.top;
+        }
+      }
+      return breakY;
+    }
+
+    const imgWidth = usableWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    const scaleRatio = imgHeight / canvas.height; // pdf-pt per canvas-px
+
+    let renderedCanvasY = 0; // kitna canvas already render ho chuka (in canvas px)
+    let firstPage = true;
+
+    while (renderedCanvasY < canvas.height) {
+      const canvasPageHeight = usableHeight / scaleRatio; // is page me kitne canvas px aa sakte h
+      let breakAt = renderedCanvasY + canvasPageHeight;
+
+      if (breakAt < canvas.height) {
+        breakAt = adjustBreak(breakAt);
+        if (breakAt <= renderedCanvasY) {
+          // agar avoid-block khud page se bada h, force break de do warna infinite loop
+          breakAt = renderedCanvasY + canvasPageHeight;
+        }
+      } else {
+        breakAt = canvas.height;
+      }
+
+      // is slice ko crop karke naya chhota canvas banao
+      const sliceHeightPx = breakAt - renderedCanvasY;
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = canvas.width;
+      pageCanvas.height = sliceHeightPx;
+      const sliceCtx = pageCanvas.getContext('2d');
+      sliceCtx.drawImage(canvas, 0, renderedCanvasY, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+
+      const sliceImgData = pageCanvas.toDataURL('image/jpeg', 0.98);
+      const sliceImgHeight = sliceHeightPx * scaleRatio;
+
+      if (!firstPage) pdf.addPage();
+      pdf.addImage(sliceImgData, 'JPEG', margin, margin, imgWidth, sliceImgHeight);
+
+      renderedCanvasY = breakAt;
+      firstPage = false;
+    }
+
+    pdf.save('huffman_simulation_report_' + Date.now() + '.pdf');
+    restoreScale();
+    btn.disabled = false;
+    btn.textContent = originalText;
+  } catch (err) {
+    console.error('PDF generation failed:', err);
+    alert('PDF banane mein error aayi: ' + err.message);
+    restoreScale();
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
   </script>
+  <script>
+(function () {
+  var DESIGN_WIDTH = 944;
+  var viewport = document.getElementById('report-viewport');
+  var inner = document.getElementById('report-scale-inner');
+  if (!viewport || !inner) return;
+
+  function fit() {
+    var avail = viewport.clientWidth || window.innerWidth || DESIGN_WIDTH;
+    var scale = Math.min(1, avail / DESIGN_WIDTH);
+    inner.style.transform = 'scale(' + scale + ')';
+    var naturalHeight = inner.scrollHeight;
+    viewport.style.height = Math.ceil(naturalHeight * scale) + 'px';
+  }
+
+  window.__vlabFitReport = fit;
+  window.addEventListener('resize', fit);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(fit);
+  }
+  fit();
+  setTimeout(fit, 60);
+  setTimeout(fit, 300);
+})();
+</script>
 </body>
 </html>`;
 }
 
 function sendSimulationReport(ctx) {
-  console.log("sendSimulationReport called, window.opener:", window.opener);
-  if (!window.opener && window.parent === window) return; // no parent/opener to receive it
-
   const stats = computeReportStats();
   const reportHtml = buildReportHtmlString({
     inputMode: ctx.inputMode,
@@ -714,10 +953,7 @@ function sendSimulationReport(ctx) {
     tdata: ctx.tdata,
     encodedTable: ctx.encodedTable,
     stats,
-    timing: {
-      startTime: ctx.startTime,
-      endTime: ctx.endTime
-    },
+    timing: { startTime: ctx.startTime, endTime: ctx.endTime },
     preTest: ctx.preTest,
     postTest: ctx.postTest
   });
@@ -725,25 +961,29 @@ function sendSimulationReport(ctx) {
   const updatedAt = String(Date.now());
 
   try {
+    const activeHash = localStorage.getItem("vlab_exp2_active_user_hash");
+    if (activeHash) {
+      localStorage.setItem(`vlab_exp2_user_${activeHash}_simulation_report_html`, reportHtml);
+      localStorage.setItem(`vlab_exp2_user_${activeHash}_simulation_report_updated_at`, updatedAt);
+    }
     localStorage.setItem("vlab_exp2_simulation_report_html", reportHtml);
     localStorage.setItem("vlab_exp2_simulation_report_updated_at", updatedAt);
   } catch (e) {
     console.error("Failed to persist simulation report to localStorage:", e);
   }
-
-  try {
-    window.parent.postMessage({
-      type: 'vlab:simulation_report_generated',
-      html: reportHtml,
-      updatedAt
-    }, "*");
-  } catch (e) {
-    console.error("postMessage to parent failed:", e);
+  // postMessage sirf tab chalega jab actually parent/opener ho
+  if (window.parent !== window) {
+    try {
+      window.parent.postMessage({
+        type: 'vlab:simulation_report_generated',
+        html: reportHtml,
+        updatedAt
+      }, "*");
+    } catch (e) {
+      console.error("postMessage to parent failed:", e);
+    }
   }
 
-  // Popup-window fallback (when this component runs in a window.open'd tab
-  // instead of an iframe) — same event, same string-timestamp format so
-  // progressreport.html's Number(value) parsing stays consistent either way.
   if (window.opener) {
     try {
       window.opener.postMessage({
@@ -758,76 +998,211 @@ function sendSimulationReport(ctx) {
 }
 
     // ---------- Download Report button handler (in-simulation) ----------
-    function handleDownloadReport(){
-      if (!encodedTable || encodedTable.length === 0) return;
-      const stats = computeReportStats();
-      const reportHtml = buildReportHtmlString({
-        inputMode, image, tdata, encodedTable, stats,
-        timing: {
-          startTime: experimentStartRef.current,
-          endTime: experimentEndRef.current
-        },
-        preTest: preTestResult,
-        postTest: postTestResult
-      });
+  function handleDownloadReport(){
+  console.log('[DBG] 1. button clicked, encodedTable:', encodedTable.length);
+  if (!encodedTable || encodedTable.length === 0) return;
+  const stats = computeReportStats();
+  const preTest = getStoredTestResult('pretest') || preTestResult;
+  const postTest = getStoredTestResult('posttest') || postTestResult;
+  const reportHtml = buildReportHtmlString({
+    inputMode, image, tdata, encodedTable, stats,
+    timing: {
+      startTime: experimentStartRef.current,
+      endTime: experimentEndRef.current
+    },
+    preTest,
+    postTest
+  });
+  console.log('[DBG] 2. reportHtml built, length:', reportHtml.length);
 
-      // Use a hidden iframe (not a bare div) so the report's own <style> tag
-      // is actually applied — assigning the full HTML string to a div's
-      // innerHTML silently strips <html>/<head>/<style>, which caused the
-      // earlier "unstyled PDF" issue.
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.left = '-99999px';
-      iframe.style.top = '0';
-      iframe.style.width = '900px';
-      iframe.style.height = '1400px';
-      iframe.style.border = 'none';
-      document.body.appendChild(iframe);
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.left = '-99999px';
+  iframe.style.top = '0';
+  // Matches (and slightly exceeds) the report's fixed #report-scale-inner
+  // design width (944px) so its own fit-to-viewport script computes a
+  // scale of 1 here -- i.e. the PDF is always generated from the full,
+  // un-shrunk desktop layout, regardless of how narrow the on-screen
+  // preview happened to be when this download was triggered.
+  iframe.style.width = '944px';
+  iframe.style.height = '1400px';
+  iframe.style.border = 'none';
 
-      iframe.onload = () => {
-        try {
-          const doc = iframe.contentDocument;
-          const root = doc.getElementById('pdf-export-root');
-          if (!root) {
-            document.body.removeChild(iframe);
-            return;
-          }
-          html2pdf()
-            .set({
-              margin: 10,
-              filename: `huffman_simulation_report_${Date.now()}.pdf`,
-              image: { type: 'jpeg', quality: 0.98 },
-              html2canvas: { scale: 2, useCORS: true },
-              jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
-              pagebreak: { mode: ['css'], avoid: '.report-page' }
-            })
-            .from(root)
-            .save()
-            .then(() => document.body.removeChild(iframe))
-            .catch((err) => {
-              console.error('PDF generation failed:', err);
-              document.body.removeChild(iframe);
-            });
-        } catch (err) {
-          console.error('PDF generation failed:', err);
+  iframe.onload = () => {
+    console.log('[DBG] 3. iframe onload fired');
+    setTimeout(async () => {
+      try {
+        const win = iframe.contentWindow;
+        const doc = iframe.contentDocument;
+        const root = doc.getElementById('pdf-export-root');
+        console.log('[DBG] 4. root found:', !!root);
+        if (!root) {
+          console.error('pdf-export-root not found');
           document.body.removeChild(iframe);
+          return;
         }
-      };
 
-      iframe.srcdoc = reportHtml;
-    }
+        let waited = 0;
+        while (
+          (typeof win.html2canvas === 'undefined' ||
+            typeof (win.jspdf?.jsPDF || win.jsPDF) === 'undefined') &&
+          waited < 5000
+        ) {
+          await new Promise(r => setTimeout(r, 100));
+          waited += 100;
+        }
+        console.log('[DBG] 5. waited', waited, 'ms');
+        if (
+          typeof win.html2canvas === 'undefined' ||
+          typeof (win.jspdf?.jsPDF || win.jsPDF) === 'undefined'
+        ) {
+          console.error('html2canvas or jsPDF not loaded inside iframe');
+          document.body.removeChild(iframe);
+          return;
+        }
+
+        if (doc.fonts && doc.fonts.ready) {
+          try { await doc.fonts.ready; } catch (e) {}
+        }
+        console.log('[DBG] 6. fonts ready');
+
+        const imgs = Array.from(root.querySelectorAll('img'));
+        await Promise.all(imgs.map(img => {
+          if (img.complete) return Promise.resolve();
+          return new Promise(resolve => {
+            img.addEventListener('load', resolve, { once: true });
+            img.addEventListener('error', resolve, { once: true });
+          });
+        }));
+        console.log('[DBG] 7. images loaded, count:', imgs.length);
+
+        void root.offsetHeight;
+        await new Promise((r) => setTimeout(r, 200));
+
+        console.log('[DBG] 8. generating canvas');
+
+        const canvas = await win.html2canvas(root, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          windowWidth: 944,
+          windowHeight: root.scrollHeight,
+          scrollX: 0, scrollY: 0,
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.98);
+
+        const JsPDFCtor = win.jspdf ? win.jspdf.jsPDF : win.jsPDF;
+        const pdf = new JsPDFCtor({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 10;
+        const usableWidth = pageWidth - margin * 2;
+        const usableHeight = pageHeight - margin * 2;
+
+        // --- smart break points: measure the boxes that must not be sliced ---
+        const avoidEls = Array.from(root.querySelectorAll('.results-card, .table-shell'));
+        const rootRect = root.getBoundingClientRect();
+        const scaleFactor = canvas.width / root.scrollWidth; // matches html2canvas 'scale'
+
+        const avoidRanges = avoidEls.map(el => {
+          const r = el.getBoundingClientRect();
+          return {
+            top: (r.top - rootRect.top) * scaleFactor,
+            bottom: (r.bottom - rootRect.top) * scaleFactor
+          };
+        }).sort((a, b) => a.top - b.top);
+
+        // Given a proposed break position (in canvas px), push it up to the
+        // start of any avoid-block it currently falls inside
+        function adjustBreak(breakY) {
+          for (const range of avoidRanges) {
+            if (breakY > range.top && breakY < range.bottom) {
+              return range.top;
+            }
+          }
+          return breakY;
+        }
+
+        const imgWidth = usableWidth;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        const scaleRatio = imgHeight / canvas.height; // pdf-pt per canvas-px
+
+        let renderedCanvasY = 0; // kitna canvas already render ho chuka (in canvas px)
+        let firstPage = true;
+
+        while (renderedCanvasY < canvas.height) {
+          const canvasPageHeight = usableHeight / scaleRatio; // is page me kitne canvas px aa sakte h
+          let breakAt = renderedCanvasY + canvasPageHeight;
+
+          if (breakAt < canvas.height) {
+            breakAt = adjustBreak(breakAt);
+            if (breakAt <= renderedCanvasY) {
+              // agar avoid-block khud page se bada h, force break de do warna infinite loop
+              breakAt = renderedCanvasY + canvasPageHeight;
+            }
+          } else {
+            breakAt = canvas.height;
+          }
+
+          // is slice ko crop karke naya chhota canvas banao
+          const sliceHeightPx = breakAt - renderedCanvasY;
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = sliceHeightPx;
+          const sliceCtx = pageCanvas.getContext('2d');
+          sliceCtx.drawImage(canvas, 0, renderedCanvasY, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+
+          const sliceImgData = pageCanvas.toDataURL('image/jpeg', 0.98);
+          const sliceImgHeight = sliceHeightPx * scaleRatio;
+
+          if (!firstPage) pdf.addPage();
+          pdf.addImage(sliceImgData, 'JPEG', margin, margin, imgWidth, sliceImgHeight);
+
+          renderedCanvasY = breakAt;
+          firstPage = false;
+        }
+
+        console.log('[DBG] 9. pdf built, saving blob');
+        const pdfBlob = pdf.output('blob');
+
+        const url = URL.createObjectURL(pdfBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `huffman_simulation_report_${Date.now()}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+        console.log('[DBG] 10. download triggered from parent window');
+        document.body.removeChild(iframe);
+      } catch (err) {
+        console.error('[DBG] outer catch error:', err);
+        document.body.removeChild(iframe);
+      }
+    }, 1200);
+  };
+  iframe.srcdoc = reportHtml;
+  document.body.appendChild(iframe);
+  console.log('[DBG] iframe appended to DOM');
+}
+
 
     function handleNextStep(){
         if(currentStep >= steps.length - 1){
             setIsComplete(true);
             experimentEndRef.current = Date.now();
             if(onTreeComplete) onTreeComplete();
+            const preTest = getStoredTestResult('pretest') || preTestResult;
+            const postTest = getStoredTestResult('posttest') || postTestResult;
             sendSimulationReport({
                 inputMode, image, tdata, encodedTable,
                 startTime: experimentStartRef.current,
                 endTime: experimentEndRef.current,
-                preTest: preTestResult,
-                postTest: postTestResult
+                preTest,
+                postTest
             });
             return;
         }
@@ -930,7 +1305,9 @@ function sendSimulationReport(ctx) {
       setTreeReady(false);
 
       setImage(x);
-      const signs = [
+      const FG = 235; // light gray pixel value for the sign strokes (0-255 range)
+      const BG = 20;  // dark gray pixel value for the background (0-255 range)
+      const signPatterns = [
           [
               [0, 0, 0, 1, 0, 0, 0],
               [0, 0, 0, 1, 0, 0, 0],
@@ -968,17 +1345,58 @@ function sendSimulationReport(ctx) {
               [0, 0, 0, 0, 0, 0, 0],
           ], // Divide
       ];
-      setOriginal(signs[x]);
-      
+
+      // Convert the 0/1 shape pattern into an actual grayscale image
+      // (pixel values in the 0-255 range) instead of a pure binary bitmap.
+      const grayscaleImage = signPatterns[x].map(row => row.map(cell => (cell === 1 ? FG : BG)));
+      setOriginal(grayscaleImage);
+
       let freqMap = {};
-      for (let row of signs[x]) {
+      for (let row of grayscaleImage) {
           for (let cell of row) {
-              const key = cell === 1 ? "1" : "0";
+              const key = String(cell);
               freqMap[key] = (freqMap[key] || 0) + 1;
           }
       }
       if (onSymbolSelected) {
           onSymbolSelected(x);
+      }
+    }
+
+    // ---------- Random grayscale image generator ----------
+    // Produces a matrix of pixel values in the 0-255 range, so the
+    // Huffman demo can be run on an image that isn't a fixed sign shape.
+    function generateRandomGrayscaleMatrix(rows = 7, cols = 7) {
+      const matrix = [];
+      for (let r = 0; r < rows; r++) {
+          const row = [];
+          for (let c = 0; c < cols; c++) {
+              row.push(Math.floor(Math.random() * 256)); // pixel value 0-255
+          }
+          matrix.push(row);
+      }
+      return matrix;
+    }
+
+    function handleRandomImage(){
+      console.log('handleRandomImage called, onNewInput exists:', !!onNewInput);
+      if (onNewInput) onNewInput();
+      setCurrentStep(-1);
+      setTree(null);
+      setShowInitialNodes(false);
+      setIsComplete(false);
+      setFrequencyData([]);
+      setEncodedTable([]);
+      setEncodedText('');
+      setShowEdgeExplanation(false);
+      setTreeReady(false);
+
+      const randomImage = generateRandomGrayscaleMatrix();
+      setImage(4);
+      setOriginal(randomImage);
+
+      if (onSymbolSelected) {
+          onSymbolSelected(4);
       }
     }
 
@@ -1067,6 +1485,34 @@ function sendSimulationReport(ctx) {
           <div onClick={() => handleImage(3)}>
           <img src={divide} id="image" />
           </div>
+          <div
+            onClick={handleRandomImage}
+            title="Generate a random grayscale image"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                minWidth: '32px',
+                minHeight: '32px',
+                borderRadius: '6px',
+                background: 'linear-gradient(135deg, #444 0%, #999 50%, #eee 100%)',
+                border: '1px solid #1d2a6d',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '16px',
+              }}
+            >
+              🎲
+            </div>
+          </div>
         </div>
       </div>
       </Box>
@@ -1126,7 +1572,8 @@ function sendSimulationReport(ctx) {
             <div
             key={`${rowIndex}-${cellIndex}`}
             id="huff_matrix"
-            style={{ backgroundColor: cell === 0 ? '#0f172a' : '#f8fafc',}}
+            title={`Pixel value: ${cell}`}
+            style={{ backgroundColor: `rgb(${cell}, ${cell}, ${cell})` }}
             ></div>
             ))
             )}
@@ -1442,24 +1889,38 @@ function sendSimulationReport(ctx) {
             </table>
         </div>
 
-        <button
-            onClick={handleDownloadReport}
-            style={{
-                marginTop: '14px',
-                padding: '10px 22px',
-                background: '#1d2a6d',
-                color: 'white',
-                border: 'none',
-                borderRadius: '999px',
-                fontWeight: 700,
-                fontSize: '13px',
-                cursor: 'pointer'
-            }}
-        >
-            ⬇ Download Report
-        </button>
-        </div>
-        
+       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
+  <button
+      onClick={() => { window.location.href = "../../simulation.html#progressreport"; }}
+      style={{
+          padding: '10px 22px',
+          background: '#1d2a6d',
+          color: 'white',
+          border: 'none',
+          borderRadius: '999px',
+          fontWeight: 700,
+          fontSize: '13px',
+          cursor: 'pointer'
+      }}>
+      📊 Progress Report
+  </button>
+  <button
+      onClick={() => { window.location.href = "../../posttest.html"; }}
+      style={{
+          padding: '10px 22px',
+          background: '#1d2a6d',
+          color: 'white',
+          border: 'none',
+          borderRadius: '999px',
+          fontWeight: 700,
+          fontSize: '13px',
+          cursor: 'pointer'
+      }}>
+      📝 Take Posttest
+  </button>
+</div>
+</div>
+
         </>
         )}      
     </div>

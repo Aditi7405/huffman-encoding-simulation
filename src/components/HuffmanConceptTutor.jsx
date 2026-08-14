@@ -1,17 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
-import { Dialog, DialogTitle, DialogContent, Popper } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, Popper, Modal } from '@mui/material';
 import Box from '@mui/material/Box';
 import HuffmanAnimation from './HuffmanAnimation';
 import Button from './styledbutton';
 import voice from '../assets/images/voice-play.png';
 import voice_pause from '../assets/images/voice-pause.png';
+import {useMediaQuery, useTheme} from '@mui/material';
 
 const getArrowStyle = (placement = 'bottom-start') => {
   const base = {
     position: 'absolute',
     width: '14px',
     height: '14px',
-    background: 'rgb(219,234,254)',
+    background: '#f5fffa',
     transform: 'rotate(45deg)',
     zIndex: 2,
   };
@@ -19,8 +20,8 @@ const getArrowStyle = (placement = 'bottom-start') => {
   if (placement.startsWith('bottom')) return {
     ...base,
     top: '-7px',
-    borderTop: '2px solid #1d2a6d',
-    borderLeft: '2px solid #1d2a6d',
+    borderTop: '3px solid #ffd700',
+    borderLeft: '3px solid #ffd700',
     ...(placement.endsWith('end')  ? { right: '18px' } : {}),
     ...(placement.endsWith('start') ? { left: '18px' } : {}),
     ...(placement === 'bottom' ? { left: '50%', transform: 'translateX(-50%) rotate(45deg)' } : {}),
@@ -29,8 +30,8 @@ const getArrowStyle = (placement = 'bottom-start') => {
   if (placement.startsWith('top')) return {
     ...base,
     bottom: '-7px',
-    borderBottom: '2px solid #1d2a6d',
-    borderRight: '2px solid #1d2a6d',
+    borderBottom: '3px solid #ffd700',
+    borderRight: '3px solid #ffd700',
     ...(placement.endsWith('end')  ? { right: '18px' } : {}),
     ...(placement.endsWith('start') ? { left: '18px' } : {}),
     ...(placement === 'top' ? { left: '50%', transform: 'translateX(-50%) rotate(45deg)' } : {}),
@@ -40,23 +41,25 @@ const getArrowStyle = (placement = 'bottom-start') => {
     ...base,
     right: '-7px',
     top: '18px',
-    borderTop: '2px solid #1d2a6d',
-    borderRight: '2px solid #1d2a6d',
+    borderTop: '3px solid #ffd700',
+    borderRight: '3px solid #ffd700',
   };
 
   if (placement.startsWith('right')) return {
     ...base,
     left: '-7px',
     top: '18px',
-    borderBottom: '2px solid #1d2a6d',
-    borderLeft: '2px solid #1d2a6d',
+    borderBottom: '3px solid #ffd700',
+    borderLeft: '3px solid #ffd700',
   };
 
   return { ...base, top: '-7px', left: '18px',
-    borderTop: '2px solid #1d2a6d', borderLeft: '2px solid #1d2a6d' };
+    borderTop: '3px solid #ffd700', borderLeft: '3px solid #ffd700' };
 };
 
 export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
+const theme = useTheme();
+const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [showInstructions, setShowInstructions] = useState(false);
   const [isHuffmanSpeaking, setIsHuffmanSpeaking] = useState(false);
@@ -184,7 +187,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
       placement: "bottom-start",
     },
     {
-      title: "Speech Button",
+      title: "Mute and Unmute Audio",
       text: "Toggle audio narration using this button. When enabled, the system will vocally explain each concept as you progress through the visualization.",
       ref: speechBtnRef,
       placement: "bottom-start",
@@ -515,11 +518,11 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   };
 
  const handleTextEntered = () => {
-  // ✅ Check waiting FIRST before marking as notified
+  // Check waiting FIRST before marking as notified
   if (!waitingForSymbolRef.current) return;
   if (isHandlingSymbolRef.current) return;
 
-  // ✅ Only mark as handled if we actually proceed
+  // Only mark as handled if we actually proceed
   if (hasNotifiedTextRef.current) return;
   hasNotifiedTextRef.current = true;
 
@@ -613,33 +616,116 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
     }
   };
 
+  const isNextDisabled =
+    ((conceptTourSteps[conceptStep]?.requiresAnalyze ||
+      conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone) ||
+    (conceptTourSteps[conceptStep]?.requiresGenerate && !isTreeGenerated) ||
+    (conceptTourSteps[conceptStep]?.requiresTreeComplete && !treeCompleted);
+
   return (
+    <>
+    <style>{`
+      .tour-exit-btn {
+        background: transparent;
+        border: 1px solid #1d2a6d;
+        border-radius: 10px;
+        padding: 8px 14px;
+        color: #64748b;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 13px;
+        transition: all 0.2s ease;
+      }
+      .tour-exit-btn:hover {
+        background: #fee2e2;
+        border-color: #dc2626;
+        color: #dc2626;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 10px rgba(220,38,38,0.25);
+      }
+
+      .tour-prev-btn {
+        background: #d1d5db;
+        color: #1d2a6d;
+        border: 1px solid #1d2a6d;
+        padding: 8px 14px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .tour-prev-btn:hover:not(:disabled) {
+        background: #b8c0cc;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 10px rgba(29,42,109,0.2);
+      }
+      .tour-prev-btn:disabled { cursor: not-allowed; opacity: 0.7; }
+
+      .tour-next-btn {
+        color: white;
+        border: none;
+        padding: 8px 18px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 13px;
+        transition: all 0.2s ease;
+      }
+      .tour-next-btn.enabled {
+        background: #1d2a6d;
+        cursor: pointer;
+      }
+      .tour-next-btn.enabled:hover {
+        background: #2f3f8f;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 14px rgba(29,42,109,0.35);
+      }
+      .tour-next-btn.disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+      }
+    `}</style>
     <Dialog
       open={open}
       onClose={onClose}
+      fullScreen={isMobile}
       aria-labelledby="explanation-dialog-title"
       PaperProps={{ id: "explanation-dialog" }}>
 
       <DialogTitle id="instructions-dialog-title"
-        sx={{
-          backgroundColor: '#1d2a6d', color: 'white',
-          display: 'flex', flexDirection: 'row',
-          justifyContent: 'space-between', alignItems: 'center',
-          padding: '12px 24px', position: 'relative'
-        }}>
+  sx={{
+    backgroundColor: '#f5fffa', color: 'white',
+    display: 'flex', flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'space-between',
+    padding: isMobile ? '6px 8px' : '12px 24px',
+    gap: isMobile ? '4px' : 0,
+    position: 'relative',
+    flexWrap: 'nowrap',
+  }}>
 
-        <span style={{ fontSize: '20px', fontWeight: '600' }}>
-          Huffman Concept
-        </span>
+  <span style={{
+    fontSize: isMobile ? '12px' : '20px',
+    fontWeight: '600',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  }}>
+    Huffman Concept
+  </span>
 
-        <div style={{ position: 'relative', display: "flex", alignItems: "center", gap: '10px' }}>
+<div style={{
+  position: 'relative', display: "flex",
+  flexWrap: 'nowrap',
+  justifyContent: 'flex-end',
+  alignItems: "center",
+  gap: isMobile ? '3px' : '10px',
+}}>
 
           {/* Speech Button */}
           <span ref={speechBtnRef} style={{ display: "inline-flex", alignItems: "center" }}>
             <Button title="Play"
               onClick={handleTutorToggle}
               style={{ display: isConceptTourRunning ? "none" : "inline-flex", minWidth: "unset", padding: "0px" }}>
-              <img src={voice} alt="voice" style={{ width: "40px", height: "auto" }} />
+              <img src={voice} alt="voice" style={{ width: isMobile ? "18px" : "40px", height: "auto" }} />
             </Button>
             <Button title="Pause"
               onClick={handleTutorToggle}
@@ -653,13 +739,23 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
             onClick={() => {
               window.speechSynthesis.cancel();
               setShowInstructions(true);
+
+              // Hide the tour's amber highlight while Instructions is open
+              const activeEl = conceptTourSteps[conceptStep]?.ref?.current;
+              if (activeEl) {
+                activeEl.style.outline = '';
+                activeEl.style.boxShadow = '';
+                activeEl.style.borderRadius = '';
+              }
+
               const steps = [
-                " Select a symbol image from Choose box or type your own text. ",
-                " Click Analyze Frequency button. ",
-                " Click Generate button. ",
-                " Click Next Step repeatedly. ",
-                " Final binary codes will be displayed. ",
-                " Click Reset to start over."
+                " Select a binary image from the image box or type your custom text.",
+                " Click the Analyze Frequency button.",
+                " Click the Generate button to create the Huffman Tree. ",
+                " Click Next Step repeatedly to merge the lowest-frequency nodes.",
+                " Click Prev Step to move back to the previous stage of the Huffman Tree construction and review the earlier merging process.",
+                " View the final Huffman Tree and binary codes in the Encoded Table.",
+                " Click the Reset button to start from the initial step."
               ];
               let index = 0;
 
@@ -683,33 +779,42 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                 window.speechSynthesis.speak(intro);
               }, 300);
             }}
-            style={{
-              background: "white", color: "#1d2a6d", fontWeight: 600,
-              padding: "8px 18px", borderRadius: "15px", cursor: "pointer",
-              whiteSpace: "nowrap", fontSize: "14px", width: "145px", height: "42px",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              border: "1px solid #333",
-            }}>
-            INSTRUCTIONS
-          </button>
+style={{
+  background: "white", color: "#1d2a6d", fontWeight: 600,
+  padding: isMobile ? "2px 5px" : "8px 18px",
+  borderRadius: "8px", cursor: "pointer",
+  whiteSpace: "nowrap",
+  fontSize: isMobile ? "8px" : "14px",
+  width: "auto", minWidth: "auto",
+  height: isMobile ? "22px" : "42px",
+  display: "flex", alignItems: "center", justifyContent: "center",
+  border: "1px solid #333",
+}}>
+  INSTRUCTIONS
+</button>
 
-          <button
-            ref={guidedTutorRef}
-            onClick={() => {
-              setShowWelcome(false);
-              window.speechSynthesis.cancel();
-              setTourRunning(true); 
-              setConceptStepSynced(0);
-              goToStep(0);
-            }}
-            style={{
-              background: "white", color: "#1d2a6d", border: "1.5px solid #1d2a6d",
-              borderRadius: "6px", padding: "5px 14px", cursor: "pointer",
-              fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center",
-              gap: "8px", whiteSpace: "nowrap", height: "42px"
-            }}>
-            <b>Guided Tutor</b>
-          </button>
+<button
+  ref={guidedTutorRef}
+  onClick={() => {
+  if (showInstructions) return;
+ setShowWelcome(false);
+ window.speechSynthesis.cancel();
+  setTourRunning(true); 
+  setConceptStepSynced(0);
+  goToStep(0);
+}}
+style={{
+  background: "#ffd700", color: "#1d2a6d", border: "1.5px solid #1d2a6d",
+  borderRadius: "6px",
+  padding: isMobile ? "2px 5px" : "5px 14px",
+  cursor: "pointer",
+  fontSize: isMobile ? "8px" : "13px",
+  fontWeight: "bold", display: "flex", alignItems: "center",
+  gap: "3px", whiteSpace: "nowrap",
+  height: isMobile ? "22px" : "42px"
+}}>
+  <b>Guided Tutor</b>
+</button>
 
           <button onClick={() => {
             window.speechSynthesis.cancel();
@@ -717,42 +822,45 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
             setTourRunning(false);
             onClose();
           }}
-            style={{
-              background: 'white', color: '#1d2a6d', border: '2px solid #1d2a6d',
-              borderRadius: '8px', padding: '6px 16px', fontWeight: '600',
-              cursor: 'pointer', fontSize: '14px'
-            }}>
-            Close
-          </button>
+style={{
+  background: 'white', color: '#1d2a6d', border: '2px solid #1d2a6d',
+  borderRadius: '6px',
+  padding: isMobile ? '2px 6px' : '6px 16px',
+  fontWeight: '600',
+  cursor: 'pointer',
+  fontSize: isMobile ? '9px' : '14px'
+}}>
+  Close
+</button>
         </div>
 
         {/* Welcome Popup */}
-        {showWelcome && welcomeAnchorEl && (
+        {showWelcome && welcomeAnchorEl && !showInstructions && (
           <Popper
             open={Boolean(welcomeAnchorEl)}
             anchorEl={welcomeAnchorEl}
             placement="bottom-end"
-            style={{ zIndex: 99999 }}
+            style={{ zIndex: 999999 }}
             modifiers={[{ name: 'offset', options: { offset: [0, 10] } }]}>
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{
                 width: '16px', height: '16px',
-                background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
-                transform: 'rotate(45deg)', borderTop: '2px solid #1d2a6d',
-                borderLeft: '2px solid #1d2a6d', marginLeft: 'auto', marginRight: '20px',
+                background: '#f5fffa',
+                transform: 'rotate(45deg)', borderTop: '2px solid #ffd700',
+                borderLeft: '2px solid #ffd700', marginLeft: 'auto', marginRight: '20px',
                 marginBottom: '-9px', zIndex: 2, flexShrink: 0, position: 'relative',
               }} />
 
               <div style={{
                 width: '320px',
-                background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
+                background: '#f5fffa',
                 borderRadius: '12px', padding: '16px',
-                boxShadow: '0 8px 25px rgba(0,0,0,0.15)', border: '2px solid #1d2a6d',
+                boxShadow: '0 8px 25px rgba(0,0,0,0.15)', border: '2px solid #ffd700',
                 position: 'relative', zIndex: 0,
               }}>
                 <div style={{
-                  textAlign: 'center', fontSize: '16px', fontWeight: '700',
+                  textAlign: 'center', fontSize: '16px', fontWeight: 'bold !important',
                   color: '#1d2a6d', marginBottom: '12px',
                   borderBottom: '1px solid #cbd5e1', paddingBottom: '8px',
                 }}>
@@ -808,7 +916,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
           open={true}
           anchorEl={anchorEl}
           placement={dynamicAnchorPlacement || conceptTourSteps[conceptStep]?.placement || "bottom-start"}
-          style={{ zIndex: 999999 }}
+          style={{ zIndex: 1000000 }}
           modifiers={[
             { name: 'offset', options: { offset: dynamicOffset || conceptTourSteps[conceptStep]?.offset || [0, 10] } },
             { name: 'flip', enabled: true },
@@ -822,16 +930,18 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
 
           <div style={{
             width: '320px',
-            background: 'linear-gradient(135deg, rgb(219,234,254), rgb(224,231,255))',
+            background: '#f5fffa',
             borderRadius: '18px', padding: '16px',
             boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-            border: '2px solid #1d2a5d', position: 'relative',
+            border: '2px solid #ffd700', position: 'relative',
           }}>
             <div style={getArrowStyle(actualPlacement)} />
 
             <div style={{
-              textAlign: 'center', fontSize: '15px', fontWeight: '700',
-              color: '#1d2a6d', marginBottom: '12px',
+              textAlign: 'center',
+              fontSize: '15px',
+              fontWeight: 'bold !important',
+              color: 'hsl(223, 87%, 25%)', marginBottom: '8px',
               borderBottom: '1px solid #cbd5e1', paddingBottom: '8px'
             }}>
               {showActionRequired ? "⚠️ Action Required" 
@@ -839,7 +949,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
               : conceptTourSteps[conceptStep]?.title}
             </div>
 
-            <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.6', marginBottom: '18px' }}>
+            <div style={{ fontSize: '0.95rem', color: '#444', lineHeight: '1.4', marginBottom: '18px', textAlign: 'justify' }}>
               {showActionRequired ? (
                 ((conceptTourSteps[conceptStep]?.requiresAnalyze ||
                   conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone
@@ -849,7 +959,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                   <span key={i} style={{
                     padding: "1px 3px", marginRight: "3px", borderRadius: "4px", display: "inline-block",
                     background: i === tourWordIndex ? "#fff8e1" : "transparent",
-                    color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
+                    color: i === tourWordIndex ? "#92400e" : "#444",
                     fontWeight: i === tourWordIndex ? "600" : "400",
                     borderBottom: i === tourWordIndex ? "2px solid #f59e0b" : "2px solid transparent",
                     transition: "all 0.15s ease",
@@ -865,7 +975,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                   <span key={i} style={{
                     padding: "1px 3px", marginRight: "3px", borderRadius: "4px", display: "inline-block",
                     background: i === tourWordIndex ? "#fff8e1" : "transparent",
-                    color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
+                    color: i === tourWordIndex ? "#92400e" : "#444",
                     fontWeight: i === tourWordIndex ? "600" : "400",
                     borderBottom: i === tourWordIndex ? "2px solid #f59e0b" : "2px solid transparent",
                     transition: "all 0.15s ease",
@@ -918,12 +1028,9 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
               <div style={{ display: 'flex', gap: '8px' }}>
-                {/* ✅ EXIT button — cancelTour use karo */}
-                <button onClick={cancelTour}
-                  style={{
-                    background: 'transparent', border: '1px solid #1d2a6d', borderRadius: '10px',
-                    padding: '8px 14px', color: '#64748b', fontWeight: '600', cursor: 'pointer', fontSize: '13px'
-                  }}>EXIT</button>
+                <button onClick={cancelTour} className="tour-exit-btn">
+                  EXIT
+                </button>
 
                 <button
                   onClick={() => {
@@ -931,65 +1038,59 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                     if (conceptStep > 0) goToStep(conceptStep - 1);
                   }}
                   disabled={conceptStep === 0}
-                  style={{
-                    background: '#d1d5db', color: '#1d2a6d', border: '1px solid #1d2a6d',
-                    padding: '8px 14px', borderRadius: '10px',
-                    cursor: conceptStep === 0 ? 'not-allowed' : 'pointer',
-                    fontWeight: '600', fontSize: '13px'
-                  }}>Back</button>
+                  className="tour-prev-btn"
+                >
+                  Prev
+                </button>
               </div>
 
               <button
                 onClick={() => {
                   const currentStepData = conceptTourSteps[conceptStep];
 
-                if (currentStepData?.waitingForSymbol) {
-  // ✅ If text mode and text already entered (waitingForSymbol is now false),
-  // allow advancing normally — don't return early
-  if (!waitingForSymbolRef.current) {
-    // user already entered text, just go to next step
-    setDynamicAnchorPlacement(null);
-    setDynamicOffset(null);
-    setDynamicTourText(null);
-    goToStep(conceptStep + 1);
-    return;
-  }
+                  if (currentStepData?.waitingForSymbol) {
+                    if (!waitingForSymbolRef.current) {
+                      setDynamicAnchorPlacement(null);
+                      setDynamicOffset(null);
+                      setDynamicTourText(null);
+                      goToStep(conceptStep + 1);
+                      return;
+                    }
 
-  // still waiting — show the prompt as before
-  setWaitingForSymbol(true);
-  waitingForSymbolRef.current = true;
-  hasNotifiedTextRef.current = false;
+                    setWaitingForSymbol(true);
+                    waitingForSymbolRef.current = true;
+                    hasNotifiedTextRef.current = false;
 
-  const mode = inputModeRef.current;
-  if (mode === 'text') {
-    const tEl = textInputBoxRef.current;
-    if (tEl) {
-      tEl.style.outline = '3px solid #f59e0b';
-      tEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
-      tEl.style.borderRadius = '8px';
-      setAnchorEl(tEl);
-      setDynamicAnchorPlacement('right');
-      setDynamicOffset([100, 10]);
-    }
-    const msg = "Here you can type the text which you want to encode. Type something to continue.";
-    setDynamicTourText(msg);
-    speakTourText(msg);
-  } else {
-    const sEl = symbolBoxRef.current;
-    if (sEl) {
-      sEl.style.outline = '3px solid #f59e0b';
-      sEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
-      sEl.style.borderRadius = '8px';
-      setAnchorEl(sEl);
-      setDynamicAnchorPlacement('right');
-      setDynamicOffset([100, 10]);
-    }
-    const msg = "Here are the symbols — Plus, Minus, Multiply, and Divide. Choose any one to continue.";
-    setDynamicTourText(msg);
-    speakTourText(msg);
-  }
-  return;
-}
+                    const mode = inputModeRef.current;
+                    if (mode === 'text') {
+                      const tEl = textInputBoxRef.current;
+                      if (tEl) {
+                        tEl.style.outline = '3px solid #f59e0b';
+                        tEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+                        tEl.style.borderRadius = '8px';
+                        setAnchorEl(tEl);
+                        setDynamicAnchorPlacement('right');
+                        setDynamicOffset([100, 10]);
+                      }
+                      const msg = "Here you can type the text which you want to encode. Type something to continue.";
+                      setDynamicTourText(msg);
+                      speakTourText(msg);
+                    } else {
+                      const sEl = symbolBoxRef.current;
+                      if (sEl) {
+                        sEl.style.outline = '3px solid #f59e0b';
+                        sEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+                        sEl.style.borderRadius = '8px';
+                        setAnchorEl(sEl);
+                        setDynamicAnchorPlacement('right');
+                        setDynamicOffset([100, 10]);
+                      }
+                      const msg = "Here are the symbols — Plus, Minus, Multiply, and Divide. Choose any one to continue.";
+                      setDynamicTourText(msg);
+                      speakTourText(msg);
+                    }
+                    return;
+                  }
 
                   if ((currentStepData?.requiresAnalyze || currentStepData?.waitingForAnalyze)
                     && !isAnalyzeDoneRef.current) {
@@ -1017,23 +1118,8 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                     cancelTour();
                   }
                 }}
-                style={{
-                  background: (
-                    ((conceptTourSteps[conceptStep]?.requiresAnalyze ||
-                      conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone) ||
-                    (conceptTourSteps[conceptStep]?.requiresGenerate && !isTreeGenerated) ||
-                    (conceptTourSteps[conceptStep]?.requiresTreeComplete && !treeCompleted)
-                  ) ? "#9ca3af" : "#1d2a6d",
-                  color: "white", border: "none", padding: "8px 18px",
-                  borderRadius: "10px",
-                  cursor: (
-                    ((conceptTourSteps[conceptStep]?.requiresAnalyze ||
-                      conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone) ||
-                    (conceptTourSteps[conceptStep]?.requiresGenerate && !isTreeGenerated) ||
-                    (conceptTourSteps[conceptStep]?.requiresTreeComplete && !treeCompleted)
-                  ) ? "not-allowed" : "pointer",
-                  fontWeight: "600", fontSize: "13px"
-                }}>
+                className={`tour-next-btn ${isNextDisabled ? 'disabled' : 'enabled'}`}
+              >
                 {conceptStep === conceptTourSteps.length - 1 ? 'Finish' : 'Next'}
               </button>
             </div>
@@ -1054,10 +1140,21 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
       )}
 
       <DialogContent sx={{ padding: "0px", height: "1700px" }}>
-        {showInstructions && (
-          <Box style={{
+
+        {/* Instructions Modal — uses MUI Modal (React Portal) so it renders
+            directly into document.body, completely outside the Dialog's
+            transformed stacking context. This is what stops any tour-highlighted
+            element (Symbol box, Analyze button, etc.) from ever appearing above it,
+            regardless of z-index values. */}
+        <Modal
+          open={showInstructions}
+          onClose={() => setShowInstructions(false)}
+          sx={{ zIndex: 2000000 }}
+        >
+          <Box sx={{
             position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)',
-            zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center'
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            outline: 'none',
           }}>
             <Box sx={{ background: 'white', borderRadius: '8px', maxWidth: '580px', width: '90%', overflow: 'hidden' }}>
               <Box sx={{ background: '#1a3a5c', padding: '12px 20px' }}>
@@ -1065,12 +1162,13 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
               </Box>
               <Box sx={{ padding: '20px 24px 8px' }}>
                 {[
-                  { stepNum: 1, html: 'Select a symbol image from Choose box or type your own text.' },
+                  { stepNum: 1, html: 'Select a <b>binary image</b> from the image box or type your <b>custom text</b>.' },
                   { stepNum: 2, html: 'Click <b>"Analyze Frequency"</b> button.' },
-                  { stepNum: 3, html: 'Click <b>"Generate"</b> button.' },
-                  { stepNum: 4, html: 'Click <b>"Next Step"</b> repeatedly.' },
-                  { stepNum: 5, html: 'Final binary codes will be displayed.' },
-                  { stepNum: 6, html: 'Click <b>"Reset"</b> to start over.' },
+                  { stepNum: 3, html: 'Click <b>"Generate"</b> button to create the Huffman Tree.' },
+                  { stepNum: 4, html: 'Click <b>"Next Step"</b> repeatedly to merge the lowest-frequency nodes.' },
+                  { stepNum: 5, html: 'Click <b>"Prev Step"</b> to move back to the previous stage of the Huffman Tree construction and review the earlier merging process.' },
+                  { stepNum: 6, html: 'View the final <b>Huffman Tree</b> and <b>binary codes</b> in the Encoded Table.' },
+                  { stepNum: 7, html: 'Click the <b>"Reset"</b> button to start from the initial step.' }
                 ].map((step, idx) => (
                   <p key={idx} style={{
                     fontSize: '14px', margin: '0 0 10px', padding: '4px 6px', borderRadius: '4px',
@@ -1096,6 +1194,12 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                   setActiveInstructionStep(-1);
                   if (isConceptTourRunning) {
                     speakTourText(conceptTourSteps[conceptStep].text);
+                    const el = conceptTourSteps[conceptStep]?.ref?.current;
+                    if (el) {
+                    el.style.outline = '3px solid #f59e0b';
+                    el.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+                    el.style.borderRadius = '8px';
+                    }
                   }
                 }}
                   style={{
@@ -1109,7 +1213,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
               </Box>
             </Box>
           </Box>
-        )}
+        </Modal>
 
         {open && <HuffmanAnimation
           symbolTextToggleRef={symbolTextToggleRef}
@@ -1164,5 +1268,6 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
         />}
       </DialogContent>
     </Dialog>
+    </>
   );
 }
