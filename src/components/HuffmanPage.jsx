@@ -18,7 +18,7 @@ import {Popper, Paper} from '@mui/material';
 import Button from "./styledbutton";
 import Select from "./styledselect";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 
 import voice from "../assets/images/voice-play.png";
 import voice_pause from "../assets/images/voice-pause.png";
@@ -109,7 +109,7 @@ function TutorBubble({text, targetRef, visible}) {
       lineHeight: "1.8",
       pointerEvents: "none",
     }}>
-    <div
+<div
         style={{
           position: "absolute",
           top: "-10px",
@@ -121,7 +121,7 @@ function TutorBubble({text, targetRef, visible}) {
           borderLeft: '2px solid #1d2a6d',
           zIndex: 1,
         }}
-      /> 
+      />
       <div
         style={{
           display: "inline-flex",
@@ -222,8 +222,6 @@ function HuffmanPageInner() {
     window.print(); 
   };
 
- 
-
   // cv now comes from the OpenCV React context, which correctly
   // reflects when the WASM module has actually finished loading.
   const { cv, loaded: isCvLoaded } = useOpenCv();
@@ -259,8 +257,8 @@ function HuffmanPageInner() {
   const [actionRequiredShown, setActionRequiredShown] = useState(false);
   const [isSpeechEnabled, setIsSpeechEnabled] = useState(true);
   const [hoveredNavBtn, setHoveredNavBtn] = useState(null);
- 
-   
+  const [actualPlacement, setActualPlacement] = useState(tourPlacement);
+  
   function calculateEntropyMap(srcGray) {
     const kernelSize = 9;
     const half = Math.floor(kernelSize / 2);
@@ -320,7 +318,7 @@ function HuffmanPageInner() {
 
     if(!qfactor || isNaN(qfactor) || qfactor < 1){
       notifyE("Please enter the value for Qunatization Factor.");
-      console.log("Image or qfactor problem");
+      //console.log("Image or qfactor problem");
       return;
     }
 
@@ -364,8 +362,9 @@ function HuffmanPageInner() {
     images.delete();
     merged.delete();
     setHresult({ compressionRatio: compressionRatio.toFixed(4) });
-    console.log(hresult);
+    //console.log(hresult);
     setIsImageProcessed(true);
+    isImageProcessedRef.current = true;
     setIsAnimationPlaying(true);
     setTimeout(() => {
       setIsAnimationPlaying(false);
@@ -414,6 +413,7 @@ function HuffmanPageInner() {
     wordTimersRef.current.forEach(t => clearTimeout(t));
     wordTimersRef.current = [];
     setIsTourPlaying(false);
+    setShowActionRequired(false);
     setAnchorEl(null);
   }
   isTutorCancelledRef.current = true;
@@ -446,6 +446,7 @@ function HuffmanPageInner() {
     const file = event.target.files?.[0];
     if (file) {
       setUploadedImageName(file.name);
+      isImageProcessedRef.current = false;
       setIsInputImageAnimationPlaying(true);
       setTimeout(() => {
         setIsInputImageAnimationPlaying(false);
@@ -471,6 +472,7 @@ function HuffmanPageInner() {
     setSineText("Output Image");
     setJpegText("Output Image");
     setHresult();
+    isImageProcessedRef.current = false;
     setRleresult();
     setScResult();
     setJpegResult();
@@ -611,6 +613,27 @@ function HuffmanPageInner() {
   const wasTourActiveRef = useRef(false);
   const tourWordIndexRef = useRef(-1);
   const savedTourStepRef = useRef(-1);
+  const isImageProcessedRef = useRef(false);
+  const imageGridRef = useRef(null);
+    
+
+const arrowRef = useRef(null);
+
+const [arrowOffset, setArrowOffset] = useState({
+  x: null,
+  y: null,
+});
+
+const [isMobileView, setIsMobileView] = useState(
+  typeof window !== "undefined" ? window.innerWidth <= 768 : false
+);
+const [arrowPos, setArrowPos] = useState({ left: null, top: null });
+
+useEffect(() => {
+  const handleResize = () => setIsMobileView(window.innerWidth <= 768);
+  window.addEventListener("resize", handleResize);
+  return () => window.removeEventListener("resize", handleResize);
+}, []);
 
 const startGuidedTutor = () => {
   setShowTutorPrompt(false);
@@ -764,7 +787,7 @@ const speakStep = () => {
   },
   {
     title: "Observe Output Analysis",
-    text: "The output panel displays three results generated after processing the selected image. The first section shows the entropy map, which represents the local information content and pixel variation in the image. Higher entropy indicates greater pixel variation and less predictability, while lower entropy indicates more uniform and predictable regions.",
+    text: "The output panel displays three results after processing the image. The first shows the entropy map, representing local pixel variation and information content. Higher entropy indicates greater variation and lower predictability, while lower entropy indicates more uniform regions.",
     refKey: "output",
     placement: "bottom-start",
   },
@@ -774,7 +797,7 @@ const speakStep = () => {
     placement: "bottom-start",
   },
   {
-   text: "The third section displays the compressed image generated from the processed image data. Observe and compare all three results to understand how Huffman Coding uses the frequency of pixel values to reduce redundant information and achieve efficient lossless compression while preserving the original image information.",
+   text: "The third section displays the compressed image generated from the processed data. Compare all three results to understand how Huffman Coding uses pixel frequency to reduce redundant information and achieve efficient lossless compression while preserving image information.",
     refKey: "output",
     placement: "bottom-start", 
   },
@@ -803,7 +826,7 @@ const getRefByKey = (key) => {
     instruction: instructionButtonRef,
     speech: speechAnchorRef,
     toolbox: toolboxRef,
-    chooseImage: chooseImageRef,
+    chooseImage: imageGridRef,
     upload: uploadButtonRef,
     quantization: quantizationRef,
     inputImage: inputImageRef,
@@ -811,6 +834,7 @@ const getRefByKey = (key) => {
     output: outputSectionRef,
     print: printButtonRef,
     concept: conceptButtonRef,
+
   };
   return map[key];
 };
@@ -921,6 +945,7 @@ const startTour = () => {
 const stopTour = () => {
   isTourCancelledRef.current = true;
   setHighlightedRefKey(null);
+  setShowActionRequired(false); 
   window.speechSynthesis.cancel();
   setTourStep(-1);
   setIsTourPlaying(false);
@@ -987,6 +1012,7 @@ const handleConceptClick = () => {
   setIsTourPlaying(false);
   setTourStep(-1);
   setTourWordIndex(-1);
+  setShowActionRequired(false);
   pausedWordIndexRef.current = 0;
 
   exp2();
@@ -994,79 +1020,148 @@ const handleConceptClick = () => {
 };
 
 const handleProcessClick = () => {
+  const quantizationStepIndex = tourSteps.findIndex(s => s.refKey === "quantization");
+
+  if (tourStep >= 0 && (!qfactor || qfactor <= 0)) {
+    if (quantizationStepIndex !== -1) {
+      goToStep(quantizationStepIndex);
+      setTimeout(() => {
+        setShowActionRequired(true);
+        if (isSpeechEnabled) {
+          speakTourText("Please enter a valid Quantization Factor before proceeding.");
+        }
+      }, 500); 
+    }
+    return; 
+  }
+
   if (isTutorEnabled || isTutorPlaying || tutorPaused) {
     isTutorCancelledRef.current = true;
     speechSynthesis.cancel();
-   if(stepIndexRef.current > 0) stepIndexRef.current -= 1;
+    if (stepIndexRef.current > 0) stepIndexRef.current -= 1;
     setIsTutorPlaying(false);
     setTutorPaused(false);
     setIsTutorEnabled(false);
     setHighlightedRefKey(null);
     setTourStep(-1);
   }
+
   lossyHuffmanEncode();
+
   setTimeout(() => {
-   const outputStep = tourSteps.findIndex(s => s.refKey === "output");
-  if (outputStep !== -1 && tourStep >= 0) {
+    const outputStep = tourSteps.findIndex(s => s.refKey === "output");
+
+    if (outputStep !== -1 && tourStep >= 0 && isImageProcessedRef.current) {
       setIsTourPlaying(true);
       isTourPlayingRef.current = true;
       isTutorCancelledRef.current = false;
       goToStep(outputStep);
-  }
+    } else if (tourStep >= 0 && !isImageProcessedRef.current) {
+      setShowActionRequired(true);
+      if (isSpeechEnabled) {
+        speakTourText("Output was not generated. Please process the image successfully before proceeding.");
+      }
+    }
   }, 1500);
-}
+};
+
+const getResponsivePlacement = (placement) => {
+  if (typeof window === "undefined") return placement;
+
+  const isMobile = window.innerWidth <= 768;
+  if (!isMobile) return placement;
+  if (placement?.startsWith("left") || placement?.startsWith("right")) {
+    const align = placement.split("-")[1] || "start";
+    return `bottom-${align}`;
+  }
+
+  return placement;
+};
 
 const getArrowStyle = (placement) => {
-  const dir = placement?.split('-')[0]; 
-  
+  const [dir, align] = (placement || 'bottom-start').split('-');
+  const size = 8;
+  const color = '#ffd700';
+
   const base = {
-    width: '16px',
-    height: '16px',
-    background: '#dbeafe',
+    position: 'absolute',
+    width: `${size * 2}px`,
+    height: `${size * 2}px`,
+    background: '#f5fffa',
     transform: 'rotate(45deg)',
     zIndex: 0,
-    flexShrink: 0,
   };
+
+  if (isMobileView) {
+    if (dir === 'bottom') return { ...base, top: `-${size}px`, borderTop: `4px solid ${color}`, borderLeft: `4px solid ${color}` };
+    if (dir === 'top') return { ...base, bottom: `-${size}px`, borderBottom: `4px solid ${color}`, borderRight: `4px solid ${color}` };
+    if (dir === 'right') return { ...base, left: `-${size}px`, borderBottom: `4px solid ${color}`, borderLeft: `4px solid ${color}` };
+    if (dir === 'left') return { ...base, right: `-${size}px`, borderTop: `4px solid ${color}`, borderRight: `4px solid ${color}` };
+    return base;
+  }
+
+  const hSide = align === 'end' ? { right: '24px' } : { left: '24px' };
+  const vSide = align === 'end' ? { bottom: '24px' } : { top: '24px' };
 
   if (dir === 'bottom') {
     return {
       ...base,
-      marginLeft: '20px',
-      marginBottom: '-8px',
-      borderTop: '2px solid #1d2a6d',
-      borderLeft: '2px solid #1d2a6d',
-      order: -1, 
+      top: `-${size}px`,
+      ...hSide,
+      borderTop: `4px solid ${color}`,
+      borderLeft: `4px solid ${color}`,
     };
   } else if (dir === 'top') {
     return {
       ...base,
-      marginLeft: '20px',
-      marginTop: '-8px',
-      borderBottom: '2px solid #1d2a6d',
-      borderRight: '2px solid #1d2a6d',
-      order: 1, 
+      bottom: `-${size}px`,
+      ...hSide,
+      borderBottom: `4px solid ${color}`,
+      borderRight: `4px solid ${color}`,
     };
   } else if (dir === 'right') {
     return {
       ...base,
-      marginTop: '20px',
-      marginLeft: '-8px',
-      borderBottom: '2px solid #1d2a6d',
-      borderLeft: '2px solid #1d2a6d',
-      order: -1,
+      left: `-${size}px`,
+      ...vSide,
+      borderBottom: `4px solid ${color}`,
+      borderLeft: `4px solid ${color}`,
     };
   } else if (dir === 'left') {
     return {
       ...base,
-      marginTop: '20px',
-      marginRight: '-8px',
-      borderTop: '2px solid #1d2a6d',
-      borderRight: '2px solid #1d2a6d',
-      order: 1,
+      right: `-${size}px`,
+      ...vSide,
+      borderTop: `4px solid ${color}`,
+      borderRight: `4px solid ${color}`,
     };
   }
   return base;
 };
+
+const tourPopperModifiers = useMemo(() => [
+  { name: 'flip', enabled: true,
+    options: { boundary: 'window', fallbackPlacements: ['top-start', 'bottom-end', 'top-end'] }},
+  { name: 'preventOverflow', options: { boundary: 'window', padding: 8, altAxis: true, tether: false } },
+  { name: 'offset', options: { offset: [0, 20] } },
+  {
+    name: 'trackActualPlacement',
+    enabled: true,
+    phase: 'afterWrite',
+    fn: ({ state }) => {
+      setActualPlacement(prev => (prev !== state.placement ? state.placement : prev));
+
+      if (isMobileView && state.elements.reference && state.elements.popper) {
+        const anchorRect = state.elements.reference.getBoundingClientRect();
+        const boxRect = state.elements.popper.getBoundingClientRect();
+        const anchorCenter = anchorRect.left + anchorRect.width / 2;
+        let left = anchorCenter - boxRect.left - 8;
+        left = Math.max(16, Math.min(left, boxRect.width - 32));
+        setArrowPos(prev => (prev.left === left ? prev : { left }));
+      }
+    },
+  },
+], [isMobileView]);
 
   return (
       <div id="main-box">
@@ -1308,27 +1403,15 @@ const getArrowStyle = (placement) => {
     ]}
     style={{ zIndex: 9999 }}
   >
-  <div style={{ display: 'flex', flexDirection: 'column',}}>
-    <div style={{
-      width: '16px',
-      height: '16px',
-      background: 'white',
-      transform: 'rotate(45deg)',
-      borderTop: '1px solid #e0e0e0',
-      borderLeft: '1px solid #e0e0e0',
-      marginLeft: 'auto',
-      marginRight: '22px',
-      marginBottom: '-10px',
-      zIndex: 0,
-      flexShrink: 0,
-    }}/>
+  <div style={{ display: 'flex', flexDirection: 'column',}}> <div style={{ width: '16px', height: '16px', background: 'white', transform: 'rotate(45deg)', borderTop: '1px solid #e0e0e0', borderLeft: '1px solid #e0e0e0', marginLeft: 'auto', marginRight: '22px', marginBottom: '-10px', zIndex: 0, flexShrink: 0, }}/>
+
     <Paper elevation={6} sx={{
       width: '320px',
       background: '#f5fffa',
       borderRadius: '12px',
       padding: '12px',
       boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-      border: '2px solid #ffd700',
+      border: '4px solid #ffd700',
       position: 'relative',
       zIndex: 1,
     }}>
@@ -1341,15 +1424,15 @@ const getArrowStyle = (placement) => {
         height: '16px',
         background: '#f5fffa',
         transform: 'rotate(45deg)',
-        borderTop: '2px solid #ffd700',
-        borderLeft: '2px solid #ffd700',
+        borderTop: '4px solid #ffd700',
+        borderLeft: '4px solid #ffd700',
         zIndex: 2,
       }}/>
 
       <div style={{
     textAlign: 'center',
     fontSize: '16px',
-    fontWeight: 'bold !important',
+    fontWeight: 'bold ',
     color: 'hsl(223, 87%, 25%)',
     marginBottom: '8px',
     borderBottom: '1px solid #cbd5e1',
@@ -1416,230 +1499,190 @@ const getArrowStyle = (placement) => {
     </div>
   </Popper>
 )}
-
-  {tourStep >= 0 && (
+   
+   {tourStep >= 0 && (
   <Popper
     open={tourStep >= 0}
     anchorEl={anchorEl}
-    placement={tourPlacement}
-    modifiers={[
-      { name: 'flip', enabled: false,
-        options: { fallbackPlacements: ['top-start', 'bottom-end', 'top-end'] }
-      },
-      { name: 'preventOverflow', options: { boundary: 'window', padding: 8 } },
-      { name: 'offset', options: { offset: [0, 20] } },
-    ]}
+    placement={getResponsivePlacement(tourPlacement)}
+    modifiers={tourPopperModifiers}
     style={{ zIndex: 9999 }}>
 
-    <div style={{
-    display: 'flex',
-    flexDirection: tourPlacement?.startsWith('left') || tourPlacement?.startsWith('right') 
-      ? 'row' 
-      : 'column',
-    alignItems: tourPlacement?.startsWith('left') || tourPlacement?.startsWith('right')
-      ? 'flex-start' 
-      : 'flex-start',
-    }}>
+  <div>
+  <Paper elevation={6} sx={{
+    width: '320px',
+    background: '#f5fffa',
+    borderRadius: '18px',
+    padding: '16px',
+    boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+    border: '4px solid #ffd700',
+    position: 'relative',
+    overflow: 'visible',
+  }}>
+    <div
+  ref={arrowRef}
+  style={{
+    ...getArrowStyle(actualPlacement),
+    ...(isMobileView && arrowPos.left != null ? { left: `${arrowPos.left}px` } : {}),
+  }}/>
 
-    <Paper elevation={6} sx={{
-      width: '320px',
-      background: '#f5fffa',
-      borderRadius: '18px',
-      padding: '16px',
-      boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-      border: '2px solid #ffd700',
-      position: 'relative',
-      zIndex: 1,
-    }}>
-<div style={{
-  position: 'absolute',
-  
-  // Vertical position
-  ...(tourPlacement?.startsWith('bottom') && { top: '-9px' }),
-  ...(tourPlacement?.startsWith('top')    && { bottom: '-9px' }),
-  ...(tourPlacement?.startsWith('right')  && { top: '20px', left: '-9px' }),
-  ...(tourPlacement?.startsWith('left')   && { top: '20px', right: '-9px' }),
-  
-  ...(( tourPlacement?.startsWith('bottom') || tourPlacement?.startsWith('top')) && 
-      tourPlacement?.endsWith('end')   && { right: '20px' }),
-  ...(( tourPlacement?.startsWith('bottom') || tourPlacement?.startsWith('top')) && 
-      tourPlacement?.endsWith('start') && { left: '20px' }),
-
-  width: '16px',
-  height: '16px',
-  background: '#f5fffa',
-  transform: 'rotate(45deg)',
-
-  ...(tourPlacement?.startsWith('bottom') && { borderTop: '2px solid #ffd700',    borderLeft: '2px solid #ffd700' }),
-  ...(tourPlacement?.startsWith('top')    && { borderBottom: '2px solid #ffd700', borderRight: '2px solid #ffd700' }),
-  ...(tourPlacement?.startsWith('right')  && { borderLeft: '2px solid #ffd700',   borderBottom: '2px solid #ffd700' }),
-  ...(tourPlacement?.startsWith('left')   && { borderRight: '2px solid #ffd700',  borderTop: '2px solid #ffd700' }),
-
-  zIndex: 2,
-}}/>
-      {/* Title */}
-      <div style={{
-        textAlign: "center",
-        fontSize: "16px",
-        fontWeight: "bold !important",
-        color: "hsl(223, 87%, 25%)",
-        marginBottom: "8px",
-        borderBottom: "1px solid ",
-        paddingBottom: "8px",
-        display: "inline-block",
-        width: "100%",
-      }}>
-        {showActionRequired ? "⚠️ Action Required" : tourSteps[tourStep]?.title}
-      </div>
-
-      {/* Text */}
-      <div style={{
-        fontSize: "0.95rem",
-        color: "#444",
-        lineHeight: "1.4",
-        fontWeight: "500",
-        marginBottom: "18px",
-        textAlign: "justify",
-      }}>
-        {showActionRequired ? (
-          (tourSteps[tourStep]?.refKey === "process"
-          ? "Please clcik the process button to run the experiment first."
-          : "Please enter a valid quantization factor before proceeding."
-        ).split(" ").map((word, i) => (
-      <span key={i} style={{
-        padding: "1px 3px",
-        marginRight: "3px",
-        borderRadius: "4px",
-        display: "inline-block",
-        background: (i === tourWordIndex && isSpeechEnabled) ? "#fff8e1" : "transparent",
-        color: (i === tourWordIndex && isSpeechEnabled) ? "#92400e" : "#1d2a6d",
-        fontWeight: (i === tourWordIndex && isSpeechEnabled) ? "600" : "400",
-      }}>
-        {word}
-      </span>
-    )) 
-        ) : (
-          tourSteps[tourStep]?.text.split(" ").map((word, i) => (
-            <span key={i} style={{
-              padding: "1px 3px",
-              marginRight: "3px",
-              borderRadius: "4px",
-              display: "inline-block",
-              background: i === tourWordIndex ? "#fff8e1" : "transparent",
-              color: i === tourWordIndex ? "#92400e" : "#1d2a6d",
-              fontWeight: i === tourWordIndex ? "600" : "400",
-            }}>
-              {word}
-            </span>
-          ))
-        )}
-      </div>
-
-      {/* Buttons */}
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        flexWrap: "wrap",
-        gap: "10px",
-        marginTop: "12px"
-      }}>
-        <div style={{ display: "flex", gap: "10px" }}>
-          <button
-            onClick={stopTour}
-            onMouseEnter={() => setHoveredNavBtn("exit")}
-            onMouseLeave={() => setHoveredNavBtn(null)}
-            style={{
-              background: hoveredNavBtn === "exit" ? "#fee2e2" : "transparent",
-              border: `1px solid ${hoveredNavBtn === "exit" ? "#dc2626" : "#1d2a6d"}`,
-              borderRadius: "10px",
-              padding: "8px 18px",
-              color: hoveredNavBtn === "exit" ? "#dc2626" : "#64748b",
-              fontWeight: "600",
-              cursor: "pointer",
-              fontSize: "14px",
-              transition: "all 0.2s ease",
-              transform: hoveredNavBtn === "exit" ? "translateY(-2px)" : "translateY(0)",
-              boxShadow: hoveredNavBtn === "exit" ? "0 4px 10px rgba(220,38,38,0.25)" : "none",
-            }}
-          >
-            EXIT
-          </button>
-
-          <button
-            onClick={() => { setShowActionRequired(false); goToStep(tourStep - 1); }}
-            disabled={tourStep === 0}
-            onMouseEnter={() => tourStep !== 0 && setHoveredNavBtn("prev")}
-            onMouseLeave={() => setHoveredNavBtn(null)}
-            style={{
-              background: hoveredNavBtn === "prev" && tourStep !== 0 ? "#b8c0cc" : "#d1d5db",
-              color: "#1d2a6d",
-              border: "1px solid #1d2a6d",
-              padding: "8px 18px",
-              borderRadius: "10px",
-              cursor: tourStep === 0 ? "not-allowed" : "pointer",
-              fontWeight: "600",
-              fontSize: "14px",
-              transition: "all 0.2s ease",
-              transform: hoveredNavBtn === "prev" && tourStep !== 0 ? "translateY(-2px)" : "translateY(0)",
-              boxShadow: hoveredNavBtn === "prev" && tourStep !== 0 ? "0 4px 10px rgba(29,42,109,0.2)" : "none",
-            }}>Prev</button>
-        </div>
-
-        <button
-          onClick={handleNextTourStep}
-          disabled={false}
-          onMouseEnter={() => {
-            const isDisabled =
-              (tourSteps[tourStep]?.refKey === "quantization" && showActionRequired && (!qfactor || qfactor <= 0)) ||
-              (tourSteps[tourStep]?.refKey === "process" && !isImageProcessed);
-            if (!isDisabled) setHoveredNavBtn("next");
-          }}
-          onMouseLeave={() => setHoveredNavBtn(null)}
-          style={{
-          background: (
-          (tourSteps[tourStep]?.refKey === "quantization" && showActionRequired && (!qfactor || qfactor <= 0)) ||
-          (tourSteps[tourStep]?.refKey === "process" && !isImageProcessed)
-          ) ? "#9ca3af" : (hoveredNavBtn === "next" ? "#2f3f8f" : "#1d2a6d"),
-          color: "white",
-          border: "none",
-          padding: "8px 18px",
-          borderRadius: "10px",
-          minWidth: "80px",
-          textAlign: "justify",
-          cursor: (
-          (tourSteps[tourStep]?.refKey === "quantization" && showActionRequired && (!qfactor || qfactor <= 0)) ||
-          (tourSteps[tourStep]?.refKey === "process" && !isImageProcessed)
-          ) ? "not-allowed" : "pointer",
-          fontWeight: "600",
-          fontSize: "14px",
-          transition: "all 0.3s ease",
-          transform: hoveredNavBtn === "next" ? "translateY(-2px)" : "translateY(0)",
-          boxShadow: hoveredNavBtn === "next" ? "0 6px 14px rgba(29,42,109,0.35)" : "none",
-          }}>
-          {tourStep === tourSteps.length - 1 ? "Finish" : "Next"}
-        </button>
-      </div>
-
-      {/* Progress */}
-      <div style={{ marginTop: '12px' }}>
-        <div style={{ background: '#eee', borderRadius: '4px', height: '6px' }}>
-          <div style={{
-            width: `${((tourStep + 1) / tourSteps.length) * 100}%`,
-            background: '#1d2a6d',
-            height: '6px',
-            borderRadius: '4px',
-            transition: '0.3s'
-          }}/>
-        </div>
-        <span style={{
-          fontSize: '11px', color: '#888',
-          marginTop: '4px', display: 'block', textAlign: 'justify',
+        {/* Title */}
+        <div style={{
+          textAlign: "center",
+          fontSize: "16px",
+          fontWeight: "bold ",
+          color: "hsl(223, 87%, 25%)",
+          marginBottom: "8px",
+          borderBottom: "1px solid ",
+          paddingBottom: "8px",
+          display: "inline-block",
+          width: "100%",
         }}>
-          {tourStep + 1} / {tourSteps.length}
-        </span>
-      </div>
-    </Paper>
+          {(showActionRequired && (tourSteps[tourStep]?.refKey === "quantization" || tourSteps[tourStep]?.refKey === "process"))
+          ? "⚠️ Action Required"
+          : tourSteps[tourStep]?.title}
+        </div>
+
+        {/* Text */}
+        <div style={{
+          fontSize: "0.95rem",
+          color: "#444",
+          lineHeight: "1.4",
+          fontWeight: "500",
+          marginBottom: "18px",
+          textAlign: "justify",
+        }}>
+          {(() => {
+            const refKey = tourSteps[tourStep]?.refKey;
+            const isValidActionStep = showActionRequired && (refKey === "quantization" || refKey === "process");
+
+            const displayText = isValidActionStep
+              ? (refKey === "process"
+                  ? "Please click the process button to run the experiment first."
+                  : "Please enter a valid quantization factor before proceeding.")
+              : tourSteps[tourStep]?.text;
+
+            return displayText.split(" ").map((word, i) => (
+              <span key={i} style={{
+                padding: "1px 3px",
+                marginRight: "3px",
+                borderRadius: "4px",
+                display: "inline-block",
+                background: (i === tourWordIndex && isSpeechEnabled) ? "#fff8e1" : "transparent",
+                color: (i === tourWordIndex && isSpeechEnabled) ? "#92400e" : "#1d2a6d",
+                fontWeight: (i === tourWordIndex && isSpeechEnabled) ? "600" : "400",
+              }}>
+                {word}
+              </span>
+            ));
+          })()}
+        </div>
+
+        {/* Buttons */}
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+          gap: "10px",
+          marginTop: "12px"
+        }}>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button
+              onClick={stopTour}
+              onMouseEnter={() => setHoveredNavBtn("exit")}
+              onMouseLeave={() => setHoveredNavBtn(null)}
+              style={{
+                background: hoveredNavBtn === "exit" ? "#fee2e2" : "transparent",
+                border: `1px solid ${hoveredNavBtn === "exit" ? "#dc2626" : "#1d2a6d"}`,
+                borderRadius: "10px",
+                padding: "8px 18px",
+                color: hoveredNavBtn === "exit" ? "#dc2626" : "#64748b",
+                fontWeight: "600",
+                cursor: "pointer",
+                fontSize: "14px",
+                transition: "all 0.2s ease",
+                transform: hoveredNavBtn === "exit" ? "translateY(-2px)" : "translateY(0)",
+                boxShadow: hoveredNavBtn === "exit" ? "0 4px 10px rgba(220,38,38,0.25)" : "none",
+              }}
+            >
+              EXIT
+            </button>
+
+            <button
+              onClick={() => { setShowActionRequired(false); goToStep(tourStep - 1); }}
+              disabled={tourStep === 0}
+              onMouseEnter={() => tourStep !== 0 && setHoveredNavBtn("prev")}
+              onMouseLeave={() => setHoveredNavBtn(null)}
+              style={{
+                background: hoveredNavBtn === "prev" && tourStep !== 0 ? "#b8c0cc" : "#d1d5db",
+                color: "#1d2a6d",
+                border: "1px solid #1d2a6d",
+                padding: "8px 18px",
+                borderRadius: "10px",
+                cursor: tourStep === 0 ? "not-allowed" : "pointer",
+                fontWeight: "600",
+                fontSize: "14px",
+                transition: "all 0.2s ease",
+                transform: hoveredNavBtn === "prev" && tourStep !== 0 ? "translateY(-2px)" : "translateY(0)",
+                boxShadow: hoveredNavBtn === "prev" && tourStep !== 0 ? "0 4px 10px rgba(29,42,109,0.2)" : "none",
+              }}>Prev</button>
+          </div>
+
+          <button
+            onClick={handleNextTourStep}
+            disabled={false}
+            onMouseEnter={() => {
+              const isDisabled =
+                (tourSteps[tourStep]?.refKey === "quantization" && showActionRequired && (!qfactor || qfactor <= 0)) ||
+                (tourSteps[tourStep]?.refKey === "process" && !isImageProcessed);
+              if (!isDisabled) setHoveredNavBtn("next");
+            }}
+            onMouseLeave={() => setHoveredNavBtn(null)}
+            style={{
+              background: (
+                (tourSteps[tourStep]?.refKey === "quantization" && showActionRequired && (!qfactor || qfactor <= 0)) ||
+                (tourSteps[tourStep]?.refKey === "process" && !isImageProcessed)
+              ) ? "#9ca3af" : (hoveredNavBtn === "next" ? "#2f3f8f" : "#1d2a6d"),
+              color: "white",
+              border: "none",
+              padding: "8px 18px",
+              borderRadius: "10px",
+              minWidth: "80px",
+              textAlign: "justify",
+              cursor: (
+                (tourSteps[tourStep]?.refKey === "quantization" && showActionRequired && (!qfactor || qfactor <= 0)) ||
+                (tourSteps[tourStep]?.refKey === "process" && !isImageProcessed)
+              ) ? "not-allowed" : "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+              transition: "all 0.3s ease",
+              transform: hoveredNavBtn === "next" ? "translateY(-2px)" : "translateY(0)",
+              boxShadow: hoveredNavBtn === "next" ? "0 6px 14px rgba(29,42,109,0.35)" : "none",
+            }}>
+            {tourStep === tourSteps.length - 1 ? "Finish" : "Next"}
+          </button>
+        </div>
+
+        {/* Progress */}
+        <div style={{ marginTop: '12px' }}>
+          <div style={{ background: '#eee', borderRadius: '4px', height: '6px' }}>
+            <div style={{
+              width: `${((tourStep + 1) / tourSteps.length) * 100}%`,
+              background: '#1d2a6d',
+              height: '6px',
+              borderRadius: '4px',
+              transition: '0.3s'
+            }}/>
+          </div>
+          <span style={{
+            fontSize: '11px', color: '#888',
+            marginTop: '4px', display: 'block', textAlign: 'justify',
+          }}>
+            {tourStep + 1} / {tourSteps.length}
+          </span>
+        </div>
+      </Paper>
     </div>
   </Popper>
 )}
@@ -1722,6 +1765,7 @@ const getArrowStyle = (placement) => {
                           Choose an Image:
                         </h4>
                         <div
+                          ref={imageGridRef} 
                           className="image-grid"
                           style={getHighlightStyle("chooseImage")}
                           sx={{
@@ -1936,6 +1980,18 @@ const getArrowStyle = (placement) => {
                           id="inputImage"
                           src={images[selectedImage]}
                           alt="Input Image"
+                          style={
+                            isMobileView
+                            ? {
+                            width: "100%",
+                            maxWidth: "180px",
+                            height: "auto",
+                            maxHeight: "180px",
+                            objectFit: "contain",
+                            borderRadius: "6px",
+                            }
+                            : undefined
+                            }
                         />
                       </Box>
                     </Box>

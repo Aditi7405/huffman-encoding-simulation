@@ -476,7 +476,7 @@ html, body{
     stroke-width: 2;
 }
 
-@keyfranes tutorBlink {
+@keyframes tutorBlink {
     0%, 100% { opacity: 1; }
 }
 .guided-tutor-btn {
@@ -592,6 +592,14 @@ html, body{
         width: 20px;
         height: 20px;
     }
+}
+
+.swal2-container{
+    z-index: 2000000 !important;
+}
+
+.swal2-popup{
+    z-index: 2000001 !important;
 }
 
 

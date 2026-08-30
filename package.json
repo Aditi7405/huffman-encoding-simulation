@@ -66,6 +66,8 @@
 
     "styled-components": "^6.1.17",
 
+    "sweetalert2": "^11.26.25",
+
     "three": "^0.175.0"
 
   },

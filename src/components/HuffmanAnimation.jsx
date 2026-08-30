@@ -13,6 +13,7 @@ import Box from '@mui/material/Box';
 import html2pdf from 'html2pdf.js';
 import iitlogo from '../assets/images/IITLOGO.png';
 import vlabLogo from '../assets/images/image.png';
+import Swal from 'sweetalert2';
 
 class TreeErrorBoundary extends React.Component {
   constructor(props) {
@@ -45,10 +46,10 @@ export default function HuffmanAnimation({
   onSymbolSelected, onAnalyzeDone, onTextEntered, onRegisterReset,
   symbolBoxRef,textInputBoxRef, onGenerate, onReset, treeDescriptionRef,
   encodedTableRef,onStepsGenerated, onNextStepDone, onTreeComplete,
-  onNewInput, onInputModeChange,
+  onNewInput, onInputModeChange, onValidationFailed,
   preTestResult, postTestResult,
 }) {
-    const [image,setImage]=useState(0);
+    const [image,setImage]=useState(null);
     const [original,setOriginal]=useState(null);
     const [tdata,setTdata]=useState('');
     const [frequencyData, setFrequencyData] = useState([]);
@@ -195,12 +196,40 @@ export default function HuffmanAnimation({
     }    
 
     function handleAnalyze(){
+//console.log('handleAnalyze called, inputMode:', inputMode, 'original:', original, 'tdata:', tdata);
+  // ---------- Validation before analyzing ----------
+  if (inputMode === 'symbol' && !original) {
+    if (onValidationFailed) onValidationFailed('pause', 'symbol');
+    Swal.fire({
+      icon: 'warning',
+      title: 'No Image Selected',
+      text: 'Please select an image symbol (or generate a random one) before analyzing.',
+      confirmButtonColor: '#1d2a6d'
+    }).then(() => {
+      if (onValidationFailed) onValidationFailed('resume', 'symbol');
+    });
+    return;
+  }
+
+  if (inputMode === 'text' && (!tdata || tdata.trim().length === 0)) {
+    if (onValidationFailed) onValidationFailed('pause', 'text');
+    Swal.fire({
+      icon: 'warning',
+      title: 'No Text Entered',
+      text: 'Please enter some text before analyzing.',
+      confirmButtonColor: '#1d2a6d'
+    }).then(() => {
+      if (onValidationFailed) onValidationFailed('resume', 'text');
+    });
+    return;
+  }
+
   let freqMap = {};
 
   if(inputMode === 'symbol' && original){
     for (let row of original) {
       for (let cell of row) {
-        const key = String(cell); // grayscale pixel value (0-255) used as the symbol
+        const key = String(cell);
         freqMap[key] = (freqMap[key] || 0) + 1;
       }
     }
@@ -214,18 +243,18 @@ export default function HuffmanAnimation({
     if (onAnalyzeDone) onAnalyzeDone();
   }
 
-      const result = Object.entries(freqMap).map(([char, freq]) => ({char, freq}));
-      setFrequencyData(result);
+  const result = Object.entries(freqMap).map(([char, freq]) => ({char, freq}));
+  setFrequencyData(result);
 
-      const generatedSteps = generateHuffmanSteps(result);
-      setSteps(generatedSteps);
-      setCurrentStep(-1);
-      setTree(null);
-      setShowInitialNodes(false);
-      setEncodedTable([]);
-      setEncodedText("");
-      setTreeReady(false);
-    }
+  const generatedSteps = generateHuffmanSteps(result);
+  setSteps(generatedSteps);
+  setCurrentStep(-1);
+  setTree(null);
+  setShowInitialNodes(false);
+  setEncodedTable([]);
+  setEncodedText("");
+  setTreeReady(false);
+}
 
     function handleGenerateTree(){
       if(!frequencyData || frequencyData.length === 0){
@@ -353,7 +382,7 @@ function getStoredTestResult(type) {
     }
     return null;
   } catch (e) {
-    console.error(`Failed to read ${type} result from localStorage:`, e);
+    //console.error(`Failed to read ${type} result from localStorage:`, e);
     return null;
   }
 }
@@ -908,7 +937,7 @@ function buildReportHtmlString({ inputMode, image, tdata, encodedTable, stats, t
     btn.disabled = false;
     btn.textContent = originalText;
   } catch (err) {
-    console.error('PDF generation failed:', err);
+   //console.error('PDF generation failed:', err);
     alert('PDF banane mein error aayi: ' + err.message);
     restoreScale();
     btn.disabled = false;
@@ -969,7 +998,7 @@ function sendSimulationReport(ctx) {
     localStorage.setItem("vlab_exp2_simulation_report_html", reportHtml);
     localStorage.setItem("vlab_exp2_simulation_report_updated_at", updatedAt);
   } catch (e) {
-    console.error("Failed to persist simulation report to localStorage:", e);
+    //console.error("Failed to persist simulation report to localStorage:", e);
   }
   // postMessage sirf tab chalega jab actually parent/opener ho
   if (window.parent !== window) {
@@ -980,7 +1009,7 @@ function sendSimulationReport(ctx) {
         updatedAt
       }, "*");
     } catch (e) {
-      console.error("postMessage to parent failed:", e);
+      //console.error("postMessage to parent failed:", e);
     }
   }
 
@@ -992,14 +1021,14 @@ function sendSimulationReport(ctx) {
         updatedAt
       }, "*");
     } catch (e) {
-      console.error("postMessage to opener failed:", e);
+     //console.error("postMessage to opener failed:", e);
     }
   }
 }
 
     // ---------- Download Report button handler (in-simulation) ----------
   function handleDownloadReport(){
-  console.log('[DBG] 1. button clicked, encodedTable:', encodedTable.length);
+  //console.log('[DBG] 1. button clicked, encodedTable:', encodedTable.length);
   if (!encodedTable || encodedTable.length === 0) return;
   const stats = computeReportStats();
   const preTest = getStoredTestResult('pretest') || preTestResult;
@@ -1013,7 +1042,7 @@ function sendSimulationReport(ctx) {
     preTest,
     postTest
   });
-  console.log('[DBG] 2. reportHtml built, length:', reportHtml.length);
+  //console.log('[DBG] 2. reportHtml built, length:', reportHtml.length);
 
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
@@ -1029,15 +1058,15 @@ function sendSimulationReport(ctx) {
   iframe.style.border = 'none';
 
   iframe.onload = () => {
-    console.log('[DBG] 3. iframe onload fired');
+    //console.log('[DBG] 3. iframe onload fired');
     setTimeout(async () => {
       try {
         const win = iframe.contentWindow;
         const doc = iframe.contentDocument;
         const root = doc.getElementById('pdf-export-root');
-        console.log('[DBG] 4. root found:', !!root);
+        //console.log('[DBG] 4. root found:', !!root);
         if (!root) {
-          console.error('pdf-export-root not found');
+          //console.error('pdf-export-root not found');
           document.body.removeChild(iframe);
           return;
         }
@@ -1051,12 +1080,12 @@ function sendSimulationReport(ctx) {
           await new Promise(r => setTimeout(r, 100));
           waited += 100;
         }
-        console.log('[DBG] 5. waited', waited, 'ms');
+        //console.log('[DBG] 5. waited', waited, 'ms');
         if (
           typeof win.html2canvas === 'undefined' ||
           typeof (win.jspdf?.jsPDF || win.jsPDF) === 'undefined'
         ) {
-          console.error('html2canvas or jsPDF not loaded inside iframe');
+          //console.error('html2canvas or jsPDF not loaded inside iframe');
           document.body.removeChild(iframe);
           return;
         }
@@ -1064,7 +1093,7 @@ function sendSimulationReport(ctx) {
         if (doc.fonts && doc.fonts.ready) {
           try { await doc.fonts.ready; } catch (e) {}
         }
-        console.log('[DBG] 6. fonts ready');
+        //console.log('[DBG] 6. fonts ready');
 
         const imgs = Array.from(root.querySelectorAll('img'));
         await Promise.all(imgs.map(img => {
@@ -1074,12 +1103,12 @@ function sendSimulationReport(ctx) {
             img.addEventListener('error', resolve, { once: true });
           });
         }));
-        console.log('[DBG] 7. images loaded, count:', imgs.length);
+        //console.log('[DBG] 7. images loaded, count:', imgs.length);
 
         void root.offsetHeight;
         await new Promise((r) => setTimeout(r, 200));
 
-        console.log('[DBG] 8. generating canvas');
+        //console.log('[DBG] 8. generating canvas');
 
         const canvas = await win.html2canvas(root, {
           scale: 2,
@@ -1164,7 +1193,7 @@ function sendSimulationReport(ctx) {
           firstPage = false;
         }
 
-        console.log('[DBG] 9. pdf built, saving blob');
+        //console.log('[DBG] 9. pdf built, saving blob');
         const pdfBlob = pdf.output('blob');
 
         const url = URL.createObjectURL(pdfBlob);
@@ -1176,17 +1205,17 @@ function sendSimulationReport(ctx) {
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-        console.log('[DBG] 10. download triggered from parent window');
+        //console.log('[DBG] 10. download triggered from parent window');
         document.body.removeChild(iframe);
       } catch (err) {
-        console.error('[DBG] outer catch error:', err);
+        //console.error('[DBG] outer catch error:', err);
         document.body.removeChild(iframe);
       }
     }, 1200);
   };
   iframe.srcdoc = reportHtml;
   document.body.appendChild(iframe);
-  console.log('[DBG] iframe appended to DOM');
+  //console.log('[DBG] iframe appended to DOM');
 }
 
 
@@ -1292,7 +1321,7 @@ function sendSimulationReport(ctx) {
     }
 
     function handleImage(x){
-    console.log('handleImage called, onNewInput exists:', !!onNewInput);
+    //console.log('handleImage called, onNewInput exists:', !!onNewInput);
       if (onNewInput) onNewInput();
       setCurrentStep(-1);
       setTree(null);
@@ -1363,23 +1392,47 @@ function sendSimulationReport(ctx) {
       }
     }
 
-    // ---------- Random grayscale image generator ----------
-    // Produces a matrix of pixel values in the 0-255 range, so the
-    // Huffman demo can be run on an image that isn't a fixed sign shape.
     function generateRandomGrayscaleMatrix(rows = 7, cols = 7) {
-      const matrix = [];
-      for (let r = 0; r < rows; r++) {
-          const row = [];
-          for (let c = 0; c < cols; c++) {
-              row.push(Math.floor(Math.random() * 256)); // pixel value 0-255
-          }
-          matrix.push(row);
-      }
-      return matrix;
+  const palette = [
+    20, 50, 80, 110,
+    140, 170, 200, 230
+  ];
+
+  const matrix = [];
+
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+
+    for (let c = 0; c < cols; c++) {
+
+      // Slight spatial influence + randomness
+      const baseIndex =
+        Math.floor(
+          ((r + c) / (rows + cols - 2)) *
+          (palette.length - 1)
+        );
+
+      const variation = Math.floor(Math.random() * 3) - 1;
+
+      const index = Math.max(
+        0,
+        Math.min(
+          palette.length - 1,
+          baseIndex + variation
+        )
+      );
+
+      row.push(palette[index]);
     }
 
+    matrix.push(row);
+  }
+
+  return matrix;
+}
+
     function handleRandomImage(){
-      console.log('handleRandomImage called, onNewInput exists:', !!onNewInput);
+      //console.log('handleRandomImage called, onNewInput exists:', !!onNewInput);
       if (onNewInput) onNewInput();
       setCurrentStep(-1);
       setTree(null);
@@ -1432,7 +1485,7 @@ function sendSimulationReport(ctx) {
       cursor: 'pointer',
       transition: '0.3s'
     }}>
-    🔣 Symbol
+     Binary Image
     </button>
     <button
     onClick={() => { 
@@ -1451,73 +1504,133 @@ function sendSimulationReport(ctx) {
       cursor: 'pointer',
       transition: '0.3s'
     }}>
-    📝 Text Input
+    Text Input
     </button>
     </div>
 
-{/* SYMBOL BOX */}  
-    <div id="Choose_box_comp" ref={symbolBoxRef}
-    style={{
-    opacity: inputMode === 'symbol' ? 1 : 0.3,
-    pointerEvents: inputMode === 'symbol' ? 'auto' : 'none',
-    transition: '0.3s',
-    position: 'relative',
-    zIndex: 9999999,
-    }}>
-    <div className="coolinput_comp">
-    <label htmlFor="input" className="text">Choose:</label>
-    <Box sx={{
-      width: '100%', height: '85%',
-      display: 'flex', flexDirection: 'row',
-      border: 1, borderRadius: 2, justifyContent: 'space-around'
-    }}>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div id="image-box-comp">
-          <div onClick={() => handleImage(0)}>
-          <img src={plus} id="image" />
-          </div>
-          <div onClick={() => handleImage(1)}>
-          <img src={minus} id="image" />
-          </div>
-          <div onClick={() => handleImage(2)}>
-          <img src={multiply} id="image" />
-          </div>
-          <div onClick={() => handleImage(3)}>
-          <img src={divide} id="image" />
-          </div>
-          <div
-            onClick={handleRandomImage}
-            title="Generate a random grayscale image"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-            }}
-          >
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                minWidth: '32px',
-                minHeight: '32px',
-                borderRadius: '6px',
-                background: 'linear-gradient(135deg, #444 0%, #999 50%, #eee 100%)',
-                border: '1px solid #1d2a6d',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '16px',
-              }}
-            >
-              🎲
-            </div>
-          </div>
-        </div>
-      </div>
-      </Box>
-      </div>
+{/* SYMBOL BOX */}
+<div id="Choose_box_comp" ref={symbolBoxRef}
+style={{
+  display: inputMode === 'symbol' ? 'block' : 'none',
+  position: 'relative',
+  zIndex: 9999999,
+}}>
+<div className="coolinput_comp">
+  <label htmlFor="input" className="text" style={{ fontWeight: 700, marginBottom: '8px', display: 'block' }}>
+    Choose Binary Image:
+  </label>
+
+  <Box sx={{
+    width: '100%',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '10px',
+    border: 1,
+    borderRadius: 2,
+    padding: '14px',
+    justifyItems: 'center',
+  }}>
+    <div
+      onClick={() => handleImage(0)}
+      style={{
+        cursor: 'pointer',
+        width: '100%',
+        padding: '10px',
+        borderRadius: '8px',
+        border: image === 0 ? '2px solid #1d2a6d' : '2px solid #e2e8f0',
+        background: image === 0 ? '#eef1fb' : '#ffffff',
+        display: 'flex',
+        justifyContent: 'center',
+        transition: '0.2s',
+      }}
+    >
+      <img src={plus} id="image" />
     </div>
+    <div
+      onClick={() => handleImage(1)}
+      style={{
+        cursor: 'pointer',
+        width: '100%',
+        padding: '10px',
+        borderRadius: '8px',
+        border: image === 1 ? '2px solid #1d2a6d' : '2px solid #e2e8f0',
+        background: image === 1 ? '#eef1fb' : '#ffffff',
+        display: 'flex',
+        justifyContent: 'center',
+        transition: '0.2s',
+      }}
+    >
+      <img src={minus} id="image" />
+    </div>
+    <div
+      onClick={() => handleImage(2)}
+      style={{
+        cursor: 'pointer',
+        width: '100%',
+        padding: '10px',
+        borderRadius: '8px',
+        border: image === 2 ? '2px solid #1d2a6d' : '2px solid #e2e8f0',
+        background: image === 2 ? '#eef1fb' : '#ffffff',
+        display: 'flex',
+        justifyContent: 'center',
+        transition: '0.2s',
+      }}
+    >
+      <img src={multiply} id="image" />
+    </div>
+    <div
+      onClick={() => handleImage(3)}
+      style={{
+        cursor: 'pointer',
+        width: '100%',
+        padding: '10px',
+        borderRadius: '8px',
+        border: image === 3 ? '2px solid #1d2a6d' : '2px solid #e2e8f0',
+        background: image === 3 ? '#eef1fb' : '#ffffff',
+        display: 'flex',
+        justifyContent: 'center',
+        transition: '0.2s',
+      }}
+    >
+      <img src={divide} id="image" />
+    </div>
+  </Box>
+
+  {/* OR divider */}
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    margin: '12px 0',
+    color: '#94a3b8',
+    fontSize: '12px',
+    fontWeight: 700,
+  }}>
+    <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+    <span style={{ padding: '0 10px' }}>OR</span>
+    <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+  </div>
+
+  {/* Random Binary Image button */}
+  <button
+    onClick={handleRandomImage}
+    title="Generate a random grayscale image"
+    style={{
+      width: '100%',
+      padding: '12px',
+      background: '#1d2a6d',
+      color: 'white',
+      border: 'none',
+      borderRadius: '8px',
+      fontWeight: 700,
+      fontSize: '13px',
+      cursor: 'pointer',
+      transition: '0.3s',
+    }}
+  >
+     Generate Random Binary Image
+  </button>
+</div>
+</div>
 
 {/* TEXT INPUT BOX */}
     <textarea
@@ -1544,20 +1657,18 @@ function sendSimulationReport(ctx) {
         setImage(0);
         }
         if (newVal.length > 0 && !hasNotifiedTextRef.current && onTextEntered) {
-            console.log('onTextEntered firing, length:', newVal.length, 'hasNotified:', hasNotifiedTextRef.current);
+            //console.log('onTextEntered firing, length:', newVal.length, 'hasNotified:', hasNotifiedTextRef.current);
         hasNotifiedTextRef.current = true;
         onTextEntered();
         }
     }}
-    disabled={inputMode === 'symbol'}
-    style={{
-    opacity: inputMode === 'text' ? 1 : 0.3,
-    cursor: inputMode === 'symbol' ? 'not-allowed' : 'auto',
-    transition: '0.3s',
-    resize: 'none',
-    position: 'relative',
-    zIndex: 9999999,
-   }}/>
+   disabled={inputMode === 'symbol'}
+style={{
+display: inputMode === 'text' ? 'block' : 'none',
+resize: 'none',
+position: 'relative',
+zIndex: 9999999,
+}}/>
     <button  
     ref={analyzeFreqRef}
     className= "analyze-btn" onClick={handleAnalyze}>
@@ -1860,14 +1971,13 @@ function sendSimulationReport(ctx) {
         {isComplete && encodedTable.length > 0 && (
         <>  
          <div className="step-explanation final-box" ref={encodedTableRef}>
-            <p>
-                <b>:  </b>Tree fully generated. Each character has now been assigned an optimal binary code
-                based on its frequency. More frequent characters have shorter codes.
-                <p>
-                <b>You can now see the final encoded output.</b>
-                </p>
-            </p>
-        
+         <p>
+         <b>:  </b>Tree fully generated. Each character has now been assigned an optimal binary code
+         based on its frequency. More frequent characters have shorter codes.
+         </p>
+         <p style={{ marginTop: '6px' }}>
+         <b>You can now see the final encoded output.</b>
+         </p>
         
         <div className='panel encoded-panel' >
             <h2>Encoded Table</h2>
@@ -1889,34 +1999,38 @@ function sendSimulationReport(ctx) {
             </table>
         </div>
 
-       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
   <button
-      onClick={() => { window.location.href = "../../simulation.html#progressreport"; }}
-      style={{
-          padding: '10px 22px',
-          background: '#1d2a6d',
-          color: 'white',
-          border: 'none',
-          borderRadius: '999px',
-          fontWeight: 700,
-          fontSize: '13px',
-          cursor: 'pointer'
-      }}>
-      📊 Progress Report
-  </button>
-  <button
-      onClick={() => { window.location.href = "../../posttest.html"; }}
-      style={{
-          padding: '10px 22px',
-          background: '#1d2a6d',
-          color: 'white',
-          border: 'none',
-          borderRadius: '999px',
-          fontWeight: 700,
-          fontSize: '13px',
-          cursor: 'pointer'
-      }}>
-      📝 Take Posttest
+    onClick={() => { window.location.href = "../../simulation.html#progressreport"; }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.transform = 'translateY(-2px)';
+      e.currentTarget.style.boxShadow = '0 6px 16px rgba(29, 42, 109, 0.35)';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = '0 3px 8px rgba(29, 42, 109, 0.2)';
+    }}
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      padding: '12px 26px',
+      background: 'linear-gradient(135deg, #1d2a6d 0%, #2f4bb8 100%)',
+      color: 'white',
+      border: 'none',
+      borderRadius: '999px',
+      fontWeight: 700,
+      fontSize: '14px',
+      letterSpacing: '0.3px',
+      cursor: 'pointer',
+      boxShadow: '0 3px 8px rgba(104, 117, 181, 0.2)',
+      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    }}
+  >
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M4 20V10M10 20V4M16 20V13M22 20H2" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+    View Progress Report
   </button>
 </div>
 </div>
