@@ -45,7 +45,7 @@ export default function HuffmanAnimation({
   nextStepBtnRef, prevStepBtnRef, resetBtnRef, treeVisualizationRef,
   onSymbolSelected, onAnalyzeDone, onTextEntered, onRegisterReset,
   symbolBoxRef,textInputBoxRef, onGenerate, onReset, treeDescriptionRef,
-  encodedTableRef,onStepsGenerated, onNextStepDone, onTreeComplete,
+  progressReportBtnRef, encodedTableRef,onStepsGenerated, onNextStepDone, onTreeComplete,
   onNewInput, onInputModeChange, onValidationFailed,
   preTestResult, postTestResult,
 }) {
@@ -1513,7 +1513,7 @@ function sendSimulationReport(ctx) {
 style={{
   display: inputMode === 'symbol' ? 'block' : 'none',
   position: 'relative',
-  zIndex: 9999999,
+  zIndex: 1,
 }}>
 <div className="coolinput_comp">
   <label htmlFor="input" className="text" style={{ fontWeight: 700, marginBottom: '8px', display: 'block' }}>
@@ -1998,9 +1998,12 @@ zIndex: 9999999,
                 </tbody>
             </table>
         </div>
+        </div>
 
-      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
+      <div 
+      style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
   <button
+    ref={progressReportBtnRef}
     onClick={() => { window.location.href = "../../simulation.html#progressreport"; }}
     onMouseEnter={(e) => {
       e.currentTarget.style.transform = 'translateY(-2px)';
@@ -2032,12 +2035,10 @@ zIndex: 9999999,
     </svg>
     View Progress Report
   </button>
+  </div>
+</>
+)}      
 </div>
-</div>
-
-        </>
-        )}      
-    </div>
 </div>
 </div>
 </div>

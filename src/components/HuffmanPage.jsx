@@ -1419,7 +1419,7 @@ const tourPopperModifiers = useMemo(() => [
       <div style={{
         position: 'absolute',
         top: '-10px',
-        right: '22px',
+        right: '19px',
         width: '16px',
         height: '16px',
         background: '#f5fffa',

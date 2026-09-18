@@ -66,6 +66,8 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   const [dynamicTourText, setDynamicTourText] = useState(null);
   const [dynamicOffset, setDynamicOffset] = useState(null);
   const [arrowEl, setArrowEl] = useState(null);
+  
+
 
   const guidedTutorRef = useRef(null);
   const instructionBtnRef = useRef(null);
@@ -77,6 +79,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
   const prevStepBtnRef = useRef(null);
   const resetBtnRef = useRef(null);
   const progressReportRef = useRef(null);
+  const progressReportBtnRef = useRef(null);
   const treeVisualizationRef = useRef(null);
   const waitingForSymbolRef = useRef(false);
   const freqTableRef = useRef(null);
@@ -270,9 +273,15 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
       placement: "right-start",
     },
     {
+     title: "Progress Report",
+     text: "Click the Progress Report button to view a detailed report of your simulation, including the frequency table, Huffman Tree, and compression statistics generated during this experiment.",
+     ref: progressReportBtnRef,
+     placement: "right-start", 
+    },
+    {
       title: "Experiment Completed",
       text: "You have successfully completed the guided walkthrough of the Huffman Encoding Simulation. Click the Progress Report button to download and review your simulation report, including the experimental results and observations.",
-      ref: progressReportRef,
+      ref: progressReportBtnRef,
       placement: "right-start",
     },
   ];
@@ -386,7 +395,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
       { name: 'preventOverflow', options: { boundary: 'viewport', padding: boundaryPadding } },
       { name: 'hide', enabled: false },
       // Popper computes the correct arrow x/y for the CURRENT (post-flip/shift) box.
-      { name: 'arrow', options: { element: arrowEl, padding: 10 } },
+      { name: 'arrow', options: { element: arrowEl, padding: 22 } },
       {
         name: 'applyArrowPosition',
         enabled: true,
@@ -1066,7 +1075,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.45)', zIndex: 999998, pointerEvents: 'none' }} />
         )}
 
-        {isConceptTourRunning && anchorEl && isPopupVisible && !showInstructions && (
+        {isConceptTourRunning &&  anchorEl && isPopupVisible && !showInstructions && (
           <Popper
             open={true}
             anchorEl={anchorEl}
@@ -1098,13 +1107,13 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                 color: 'hsl(223, 87%, 25%)', marginBottom: '8px',
                 borderBottom: '1px solid #cbd5e1', paddingBottom: '8px'
               }}>
-                {showActionRequired ? "⚠️ Action Required"
+                { showActionRequired ? "⚠️ Action Required"
                   : dynamicTourText ? (inputModeRef.current === 'text' ? "Text Input" : "Symbol Selected")
                     : conceptTourSteps[conceptStep]?.title}
               </div>
 
               <div style={{ fontSize: isMobile ? '0.85rem' : '0.95rem', color: '#444', lineHeight: '1.4', marginBottom: '18px', textAlign: 'justify' }}>
-                {showActionRequired ? (
+                { showActionRequired ? (
                   ((conceptTourSteps[conceptStep]?.requiresAnalyze ||
                     conceptTourSteps[conceptStep]?.waitingForAnalyze) && !isAnalyzeDone
                     ? "Please click the Analyze Frequency button before proceeding."
@@ -1137,7 +1146,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                   ))
                 )}
 
-                {isConceptTourRunning && conceptTourSteps[conceptStep]?.requiresTreeComplete && !treeCompleted && (
+                { isConceptTourRunning && conceptTourSteps[conceptStep]?.requiresTreeComplete && !treeCompleted && (
                   <div style={{
                     marginBottom: '12px', background: 'rgba(255,255,255,0.6)',
                     borderRadius: '10px', padding: '10px 14px', border: '1px solid #c7d2fe'
@@ -1162,7 +1171,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                   </div>
                 )}
 
-                {isConceptTourRunning && conceptTourSteps[conceptStep]?.requiresTreeComplete && treeCompleted && (
+                { isConceptTourRunning && conceptTourSteps[conceptStep]?.requiresTreeComplete && treeCompleted && (
                   <div style={{
                     marginBottom: '12px',
                     background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)',
@@ -1179,115 +1188,126 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
                 )}
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={cancelTour} className="tour-exit-btn">
-                    EXIT
+              {/*{showCompletionPopup ? (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                  <button
+                    onClick={() => {
+                      setShowCompletionPopup(false);
+                      cancelTour();
+                    }}
+                    className="tour-exit-btn"
+                  >
+                    Close
                   </button>
+                </div>
+              ) : (*/}
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={cancelTour} className="tour-exit-btn">
+                      EXIT
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowActionRequired(false);
+                        if (conceptStep > 0) goToStep(conceptStep - 1);
+                      }}
+                      disabled={conceptStep === 0}
+                      className="tour-prev-btn"
+                    >
+                      Prev
+                    </button>
+                  </div>
 
                   <button
                     onClick={() => {
-                      setShowActionRequired(false);
-                      if (conceptStep > 0) goToStep(conceptStep - 1);
-                    }}
-                    disabled={conceptStep === 0}
-                    className="tour-prev-btn"
-                  >
-                    Prev
-                  </button>
-                </div>
+                      const currentStepData = conceptTourSteps[conceptStep];
 
-                <button
-                  onClick={() => {
-                    const currentStepData = conceptTourSteps[conceptStep];
+                      if (currentStepData?.waitingForSymbol) {
+                        if (!waitingForSymbolRef.current) {
+                          setDynamicAnchorPlacement(null);
+                          setDynamicOffset(null);
+                          setDynamicTourText(null);
+                          goToStep(conceptStep + 1);
+                          return;
+                        }
 
-                    if (currentStepData?.waitingForSymbol) {
-                      if (!waitingForSymbolRef.current) {
-                        setDynamicAnchorPlacement(null);
-                        setDynamicOffset(null);
-                        setDynamicTourText(null);
-                        goToStep(conceptStep + 1);
+                        setWaitingForSymbol(true);
+                        waitingForSymbolRef.current = true;
+                        hasNotifiedTextRef.current = false;
+
+                        const mode = inputModeRef.current;
+                        if (mode === 'text') {
+                          const tEl = textInputBoxRef.current;
+                          if (tEl) {
+                            tEl.style.outline = '3px solid #f59e0b';
+                            tEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+                            tEl.style.borderRadius = '8px';
+                            setAnchorEl(tEl);
+                            setDynamicAnchorPlacement(getResponsivePlacement('right'));
+                            setDynamicOffset(getResponsiveOffset([100, 10]));
+                          }
+                          const msg = "Here you can type the text which you want to encode. Type something to continue.";
+                          setDynamicTourText(msg);
+                          speakTourText(msg);
+                        } else {
+                          const sEl = symbolBoxRef.current;
+                          if (sEl) {
+                            sEl.style.outline = '3px solid #f59e0b';
+                            sEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
+                            sEl.style.borderRadius = '8px';
+                            setAnchorEl(sEl);
+                            setDynamicAnchorPlacement(getResponsivePlacement('right'));
+                            setDynamicOffset(getResponsiveOffset([100, 10]));
+                          }
+                          const msg = "Here are the symbols — Plus, Minus, Multiply, and Divide. Choose any one to continue.";
+                          setDynamicTourText(msg);
+                          speakTourText(msg);
+                        }
                         return;
                       }
+      if ((currentStepData?.requiresAnalyze || currentStepData?.waitingForAnalyze)
+      && !isAnalyzeDoneRef.current) {
+      setShowActionRequired(true);
+      speakTourText("Please click the Analyze Frequency button before proceeding.");
+      return;
+    }
 
-                      setWaitingForSymbol(true);
-                      waitingForSymbolRef.current = true;
-                      hasNotifiedTextRef.current = false;
+    if (currentStepData?.requiresGenerate && !isTreeGeneratedRef.current) {
+      setShowActionRequired(true);
+      speakTourText("Please click the Generate button before proceeding.");
+      return;
+    }
 
-                      const mode = inputModeRef.current;
-                      if (mode === 'text') {
-                        const tEl = textInputBoxRef.current;
-                        if (tEl) {
-                          tEl.style.outline = '3px solid #f59e0b';
-                          tEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
-                          tEl.style.borderRadius = '8px';
-                          setAnchorEl(tEl);
-                          setDynamicAnchorPlacement(getResponsivePlacement('right'));
-                          setDynamicOffset(getResponsiveOffset([100, 10]));
-                        }
-                        const msg = "Here you can type the text which you want to encode. Type something to continue.";
-                        setDynamicTourText(msg);
-                        speakTourText(msg);
-                      } else {
-                        const sEl = symbolBoxRef.current;
-                        if (sEl) {
-                          sEl.style.outline = '3px solid #f59e0b';
-                          sEl.style.boxShadow = '0 0 0 6px rgba(245, 158, 11, 0.3)';
-                          sEl.style.borderRadius = '8px';
-                          setAnchorEl(sEl);
-                          setDynamicAnchorPlacement(getResponsivePlacement('right'));
-                          setDynamicOffset(getResponsiveOffset([100, 10]));
-                        }
-                        const msg = "Here are the symbols — Plus, Minus, Multiply, and Divide. Choose any one to continue.";
-                        setDynamicTourText(msg);
-                        speakTourText(msg);
-                      }
-                      return;
-                    }
+    if (currentStepData?.requiresTreeComplete && !treeCompletedRef.current) {
+      speakTourText("Please complete the tree by clicking Next Step button until tree is fully built.");
+      return;
+    }
 
-                    if ((currentStepData?.requiresAnalyze || currentStepData?.waitingForAnalyze)
-                      && !isAnalyzeDoneRef.current) {
-                      setShowActionRequired(true);
-                      speakTourText("Please click the Analyze Frequency button before proceeding.");
-                      return;
-                    }
-
-                    if (currentStepData?.requiresGenerate && !isTreeGeneratedRef.current) {
-                      setShowActionRequired(true);
-                      speakTourText("Please click the Generate button before proceeding.");
-                      return;
-                    }
-
-                    if (currentStepData?.requiresTreeComplete && !treeCompletedRef.current) {
-                      speakTourText("Please complete the tree by clicking Next Step button until tree is fully built.");
-                      return;
-                    }
-
-                    setShowActionRequired(false);
-
-                    if (conceptStep < conceptTourSteps.length - 1) {
-                      goToStep(conceptStep + 1);
-                    } else {
-                      cancelTour();
-                    }
-                  }}
-                  className={`tour-next-btn ${isNextDisabled ? 'disabled' : 'enabled'}`}
-                >
-                  {conceptStep === conceptTourSteps.length - 1 ? 'Finish' : 'Next'}
-                </button>
-              </div>
-
-              <div style={{ marginTop: '12px' }}>
-                <div style={{ background: '#eee', borderRadius: '4px', height: '6px' }}>
-                  <div style={{
-                    width: `${((conceptStep + 1) / conceptTourSteps.length) * 100}%`,
-                    background: '#1d2a6d', height: '6px', borderRadius: '4px', transition: '0.3s'
-                  }} />
+    setShowActionRequired(false);
+    if (conceptStep < conceptTourSteps.length - 1) {
+      goToStep(conceptStep + 1);
+    } else {
+      window.speechSynthesis.cancel();
+      let tourEnded = false;
+      const finishTour = () => {
+        if (tourEnded) return;
+        tourEnded = true;
+        cancelTour();
+      };
+      speakTourText(
+        "You have successfully completed the guided tour of Huffman Encoding. You can now view your progress report.",
+        finishTour
+      );
+      setTimeout(finishTour, 4000);
+    }
+  }}
+  className={`tour-next-btn ${isNextDisabled ? 'disabled' : 'enabled'}`}
+>
+  {conceptStep === conceptTourSteps.length - 1 ? 'Finish' : 'Next'}
+</button>
+                      
                 </div>
-                <span style={{ fontSize: '11px', color: '#888', marginTop: '4px', display: 'block', textAlign: 'right' }}>
-                  {conceptStep + 1} / {conceptTourSteps.length}
-                </span>
-              </div>
               </div>
             </div>
           </Popper>
@@ -1391,6 +1411,7 @@ export default function HuffmanConceptTutor({ open, onClose, onOpen }) {
             prevStepBtnRef={prevStepBtnRef}
             resetBtnRef={resetBtnRef}
             treeVisualizationRef={treeVisualizationRef}
+            progressReportBtnRef={progressReportBtnRef} 
             onSymbolSelected={handleSymbolSelected}
             onAnalyzeDone={handleAnalyzeDone}
             onValidationFailed={handleAnalyzeValidationFailed}
